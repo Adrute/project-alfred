@@ -21,6 +21,13 @@ permite controlarlos, revisar sus intercambios A2A 1.0, explorar SQLite y borrar
 recorrido crítico está automatizado con Playwright. Alfred expone además un adaptador local A2A 1.0
 para descubrimiento e interoperabilidad, sin convertir los agentes internos en microservicios.
 
+## Vista previa
+
+![Panel diario de Alfred](preview/01-inicio.png)
+
+Consulta la [galería completa de la aplicación](preview/README.md), con las pantallas de chat,
+planificación, asignaturas, grupos, alumnado, tutoría, organización del aula y administración.
+
 ## Requisitos
 
 - Node.js 20.9 o posterior (probado con 22.23.3).
@@ -110,6 +117,7 @@ npm run db:generate  # genera Prisma Client
 npm run db:migrate   # crea/aplica una migración de desarrollo
 npm run db:seed      # crea grupos, docencia, tutoría, horario y alumnado ficticio
 npm run demo:prepare # añade observaciones ficticias y plano inicial idempotente
+npm run preview:capture # regenera la galería de capturas con datos ficticios
 npm run db:studio    # inspector local de la base
 ```
 

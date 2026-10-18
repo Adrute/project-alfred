@@ -22,6 +22,7 @@
     "db:deploy": "node --import tsx scripts/deploy-database.ts",
     "db:seed": "node --import tsx prisma/seed.ts",
     "demo:prepare": "npm run db:seed && node --import tsx scripts/prepare-demo.ts",
+    "preview:capture": "node --import tsx scripts/capture-previews.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
