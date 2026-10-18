@@ -1,0 +1,102 @@
+# Decisiones técnicas
+
+## ADR-001 · Monolito modular con Route Handlers
+
+Next.js concentra UI y backend local, reduce procesos y simplifica la instalación. Los límites se
+preservan por módulos y servicios. Los agentes internos no se convierten en microservicios; la
+interoperabilidad A2A se implementa únicamente como adaptador en el borde HTTP local.
+
+## ADR-002 · Prisma 7, no Prisma 8
+
+En octubre de 2026 Prisma 8 todavía presenta SQLite como experimental, mientras Prisma 7 sigue
+soportado. Se fija la rama 7 y se usa el adaptador oficial `better-sqlite3`. El lockfile conserva las
+versiones exactas resueltas. Revisar esta decisión antes de una actualización mayor.
+
+## ADR-003 · `qwen3.5:9b` como perfil funcional
+
+El Mac detectado dispone de Apple M4 y 16 GB. El perfil inicial `qwen3:4b` era adecuado para validar
+la integración local, pero no ofrece el margen de calidad requerido para convertir Alfred en una
+herramienta diaria. Se adopta `qwen3.5:9b` como perfil funcional por su mejor seguimiento de
+instrucciones, razonamiento y uso de herramientas, manteniendo Ollama en loopback. El modelo ocupa
+aproximadamente 6,6–7,6 GB según la variante publicada. `qwen3:4b` queda limitado al desarrollo rápido.
+
+El cambio de modelo no constituye por sí solo una garantía: las intenciones de alto riesgo se enrutan
+mediante reglas deterministas, todas las herramientas tienen esquemas Zod, las entidades se resuelven
+contra SQLite y las escrituras requieren una `PendingAction`. `npm run ai:eval` forma parte de la
+validación del modelo configurado.
+
+## ADR-004 · HTTP nativo para Ollama
+
+Se usa `fetch` de Node en vez de un SDK adicional. El proveedor acepta únicamente hosts loopback,
+aplica timeout, JSON Schema y validación Zod. No hay fallback cloud.
+
+## ADR-005 · Confirmación idempotente
+
+`PendingAction` conserva el payload validado y una clave única. Confirmar debe ejecutar exactamente
+ese payload dentro de una transacción. Esto evita que una regeneración del LLM o un reintento cambie
+o duplique la operación.
+
+## ADR-006 · Sin base vectorial mientras no exista una necesidad demostrada
+
+Consultas relacionales e índices cubren los escenarios conocidos. FTS5 podrá evaluarse cuando exista
+una necesidad de búsqueda textual demostrada. Se evita complejidad y memoria duplicada.
+
+## ADR-007 · Recurrencia separada de sesiones concretas
+
+El horario habitual se modela con `WeeklyTimetable` y `TimetableSlot`; cada fecha real se materializa
+como `LessonPlan`. La clave única por franja y fecha evita duplicados. El día se guarda como fecha UTC
+normalizada y las horas como minutos desde medianoche en la zona del horario. Así no se desplazan las
+clases por horario de verano y la lógica es idéntica en macOS y Windows.
+
+## ADR-008 · Progreso basado en confirmaciones
+
+Las propuestas de actividades pueden proceder de Ollama, pero duración, solapamientos, recurrencia y
+progreso se calculan en servicios deterministas. `LessonExecution` conserva cada confirmación y
+`PlanningChange` registra versiones antes/después sin sobrescribir silenciosamente el historial.
+
+## ADR-009 · Contexto centralizado antes de delegar
+
+Alfred resuelve el foco conversacional antes de invocar un agente. El modelo propone referencias y
+tema mediante un esquema Zod, y los servicios validan cualquier nombre contra los alumnos existentes
+antes de convertirlo en un identificador. El foco se guarda por conversación y no se trata como un
+hecho docente. Esto permite continuaciones naturales para cualquier agente sin acoplarlos al texto del
+chat. A2A no resuelve por sí mismo correferencias o memoria: reutiliza el contexto ya resuelto y no
+introduce llamadas de red entre módulos.
+
+## ADR-010 · La intención prevalece sobre el contexto visual
+
+La pantalla actual aporta referencias, nunca intención. Ver la ficha de un alumno permite resolver
+«él» o «ella», pero no autoriza a interpretar cualquier frase como una observación. Alfred distingue
+si el alumno fue nombrado directamente, heredado del diálogo o simplemente visible; una operación de
+la aplicación, como crear una clase, se clasifica antes de considerar una escritura sobre alumnado.
+Las órdenes inequívocas de creación o control tienen un enrutado determinista que el modelo no puede
+degradar a otra mutación.
+
+## ADR-011 · A2A 1.0 como adaptador local, sin framework adicional
+
+Alfred publica una Agent Card en `/.well-known/agent-card.json` y una interfaz HTTP+JSON A2A 1.0 en
+`/api/a2a`. La tarjeta presenta Alfred como el agente remoto y agrupa los módulos internos en skills;
+no expone cada módulo como proceso ni como puerto independiente. `contextId` reutiliza las
+conversaciones existentes y las mutaciones devuelven referencias a `PendingAction`, conservando la
+confirmación humana.
+
+Se implementa el subconjunto anunciado por la tarjeta: mensajes síncronos de texto y partes de datos.
+Streaming, push y tareas persistentes se declaran como no soportados. No se incorpora un SDK porque
+la frontera necesaria es pequeña, se valida con Zod y añadir un framework de agentes aumentaría la
+superficie de dependencias. El endpoint continúa limitado a `127.0.0.1`; una futura exposición de red
+requerirá autenticación, autorización por cliente y una revisión específica de privacidad.
+
+## ADR-012 · Binding A2A 1.0 interno y auditable
+
+La delegación de Alfred a los seis agentes especializados usa un transporte síncrono en proceso con
+el modelo de datos A2A 1.0. Cada llamada genera un `Message`, una `Task` con estado terminal y un
+`Artifact` con el resultado estructurado. El registro persistente permite inspección operativa sin
+guardar prompts ni razonamiento interno. Se evita el SDK oficial porque no se necesitan red, streaming
+ni push para módulos del mismo monolito; los contratos mantienen nombres y semántica de A2A 1.0 y
+están cubiertos por pruebas de regresión.
+
+## Licencias directas
+
+Next.js, React, Tailwind CSS, Zod, Vitest y `better-sqlite3` usan licencias permisivas; Prisma y Qwen3
+usan Apache 2.0. Antes de distribuir, generar y revisar un inventario completo de dependencias
+transitivas y conservar avisos de licencia. Esta revisión inicial no sustituye asesoramiento legal.
