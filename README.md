@@ -1,4 +1,13 @@
-# Alfred
+<p align="center">
+  <img src="public/images/alfred-avatar-bellhop.png" alt="Avatar de Alfred" width="190" />
+</p>
+
+<h1 align="center">¡Hola! Soy Alfred</h1>
+
+<p align="center">
+  <strong>Tu asistente docente inteligente, privado y local.</strong><br />
+  Estoy aquí para ayudarte a organizar tus clases, acompañar a tu alumnado y preparar cada día con más calma.
+</p>
 
 Alfred es una plataforma local-first de asistencia docente. La aplicación combina una interfaz web en
 Next.js, memoria estructurada en SQLite y siete agentes coordinados. El lenguaje natural se procesa
@@ -23,10 +32,32 @@ para descubrimiento e interoperabilidad, sin convertir los agentes internos en m
 
 ## Vista previa
 
-![Panel diario de Alfred](preview/01-inicio.png)
+| Inicio | Alfred contextual |
+|---|---|
+| ![Panel diario de Alfred](preview/01-inicio.png) | ![Asistente contextual de Alfred](preview/02-alfred-contextual.png) |
 
-Consulta la [galería completa de la aplicación](preview/README.md), con las pantallas de chat,
-planificación, asignaturas, grupos, alumnado, tutoría, organización del aula y administración.
+| Chat | Planificación |
+|---|---|
+| ![Chat con Alfred](preview/03-chat.png) | ![Planificación semanal](preview/04-planificacion.png) |
+
+| Asignatura | Grupo |
+|---|---|
+| ![Ficha académica por asignatura](preview/05-asignatura.png) | ![Detalle de un grupo](preview/06-grupo.png) |
+
+| Alumno | Tutoría |
+|---|---|
+| ![Ficha general del alumno](preview/07-alumno.png) | ![Seguimiento tutorial](preview/08-tutoria.png) |
+
+| Organización del aula | Agentes |
+|---|---|
+| ![Organización del aula](preview/09-organizacion-aula.png) | ![Administración de agentes](preview/10-administracion-agentes.png) |
+
+| Conversaciones A2A | Base de datos |
+|---|---|
+| ![Trazabilidad de conversaciones A2A](preview/11-administracion-a2a.png) | ![Administrador de base de datos](preview/12-administracion-base-datos.png) |
+
+Las imágenes se generan con datos ficticios. Consulta también la [galería independiente](preview/README.md)
+o regénérala localmente con `npm run preview:capture`.
 
 ## Requisitos
 
@@ -39,7 +70,7 @@ planificación, asignaturas, grupos, alumnado, tutoría, organización del aula 
 ## Instalación en macOS
 
 ```sh
-git clone <URL_DEL_REPOSITORIO> alfred
+git clone https://github.com/Adrute/project-alfred.git alfred
 cd alfred
 npm install
 cp .env.example .env
@@ -64,7 +95,7 @@ ejecutar `ollama serve` manualmente.
 En PowerShell, con Node.js, Git y Ollama ya instalados:
 
 ```powershell
-git clone <URL_DEL_REPOSITORIO> alfred
+git clone https://github.com/Adrute/project-alfred.git alfred
 Set-Location alfred
 npm install
 Copy-Item .env.example .env
