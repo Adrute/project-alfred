@@ -10,6 +10,7 @@ import { TeachingView } from "@/components/teaching-view";
 import { TutorGroupView } from "@/components/tutor-group-view";
 import { parseStudentNames } from "@/domain/student-admin";
 import { weightedGradeAverage } from "@/domain/teaching";
+import { MarkdownMessage, plainMarkdown } from "@/components/markdown-message";
 
 type View = "home" | "chat" | "planning" | "teaching" | "classes" | "students" | "tutoring" | "seating" | "admin";
 interface Observation { id: string; content: string; category: string; observedAt: string }
@@ -47,6 +48,14 @@ interface Pending { id: string; operation: string; payload: { type: string; cont
 interface ChatMessage { id: string; role: "user" | "assistant"; content: string; agentId?: string; pending?: Pending }
 interface ConversationSummary { id: string; title: string; updatedAt: string; messages: Array<{ content: string }>; _count: { messages: number } }
 interface ContextualViewState { summary: string; studentId?: string; studentName?: string }
+interface ChatGptStatus {
+  connected: boolean;
+  planEnabled: boolean;
+  account: { email?: string; name?: string; picture?: string } | null;
+  model: string | null;
+  detail: string;
+  warning?: string | null;
+}
 
 const nav: Array<{ id: View; icon: string; label: string }> = [
   { id: "home", icon: "⌂", label: "Inicio" }, { id: "chat", icon: "✦", label: "Chat con Alfred" },
@@ -87,15 +96,38 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
   const [teachingContext, setTeachingContext] = useState<ContextualViewState>({ summary: "Asignaturas y grupos impartidos por la profesora." });
   const [tutoringContext, setTutoringContext] = useState<ContextualViewState>({ summary: "Grupo tutor y seguimiento tutorial de la profesora." });
   const [adminContext, setAdminContext] = useState("Panel de administración y estado de los siete agentes locales.");
+  const [chatGpt, setChatGpt] = useState<ChatGptStatus>({
+    connected: initialStatus.ai.connected,
+    planEnabled: initialStatus.ai.planEnabled,
+    account: null,
+    model: initialStatus.ai.model,
+    detail: initialStatus.ai.detail,
+  });
 
   const refresh = async () => setData(await jsonFetch<Bootstrap>("/api/bootstrap"));
   useEffect(() => {
     void jsonFetch<Bootstrap>("/api/bootstrap").then(setData);
+    void jsonFetch<ChatGptStatus>("/api/auth/chatgpt").then(setChatGpt);
     void jsonFetch<{ conversation: { id: string; messages: ChatMessage[] } | null; conversations: ConversationSummary[] }>("/api/chat").then((result) => {
       setConversations(result.conversations);
       if (result.conversation) { setConversationId(result.conversation.id); setMessages(result.conversation.messages); }
     });
+    const parameters = new URLSearchParams(window.location.search);
+    queueMicrotask(() => {
+      if (parameters.get("chatgpt") === "error") setError(parameters.get("reason") ?? "No se pudo conectar ChatGPT.");
+      if (parameters.has("chatgpt")) window.history.replaceState({}, "", window.location.pathname);
+    });
   }, []);
+
+  const disconnectChatGpt = async () => {
+    try {
+      const status = await jsonFetch<ChatGptStatus>("/api/auth/chatgpt", { method: "DELETE" });
+      setChatGpt(status);
+      if (status.warning) setError(status.warning);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo cerrar la sesión de ChatGPT.");
+    }
+  };
 
   const filteredStudents = useMemo(() => (data?.students ?? []).filter((student) =>
     `${student.firstName} ${student.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()),
@@ -206,14 +238,14 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
     <aside className="sidebar">
       <div className="sidebar-brand"><AlfredAvatar className="sidebar-brand-avatar" size={38}/><div><strong>Alfred</strong><small>Asistente docente</small></div></div>
       <nav>{nav.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><i>{item.icon}</i>{item.label}</button>)}</nav>
-      <div className="local-card"><span className="status-dot is-ready"/><div><strong>Privado y local</strong><small>{initialStatus.ollama.model} · SQLite</small></div></div>
+      <div className="local-card"><span className="status-dot is-ready"/><div><strong>Datos locales</strong><small>{chatGpt.planEnabled ? "GPT activo · nombres protegidos" : "Modo manual · SQLite"}</small></div></div>
       <div className="teacher-card"><div className="teacher-avatar">P</div><div><strong>Profesora</strong><small>Curso 2026–2027</small></div></div>
     </aside>
     <main className="workspace">
-      <header className="workspace-header"><div><p className="eyebrow">{nav.find((item) => item.id === view)?.label}</p><h1>{view === "home" ? "Tu día" : nav.find((item) => item.id === view)?.label}</h1></div><div className="header-actions"><span>{new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</span><button onClick={() => void refresh()} aria-label="Actualizar datos">↻</button></div></header>
+      <header className="workspace-header"><div><p className="eyebrow">{nav.find((item) => item.id === view)?.label}</p><h1>{view === "home" ? "Tu día" : nav.find((item) => item.id === view)?.label}</h1></div><div className="header-actions"><ChatGptControl status={chatGpt} disconnect={disconnectChatGpt}/><span>{new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</span><button onClick={() => void refresh()} aria-label="Actualizar datos">↻</button></div></header>
       {error && <div className="error-banner">{error}<button onClick={() => setError("")}>×</button></div>}
       {view === "home" && <HomeView data={data} onNavigate={setView} onPrompt={(prompt) => void sendMessage(prompt)} />}
-      {view === "chat" && <ChatView messages={messages} conversations={conversations} conversationId={conversationId} input={input} setInput={setInput} busy={busy} sendMessage={sendMessage} confirm={confirm} selectConversation={selectConversation} newConversation={() => { setMessages([]); setConversationId(undefined); setInput(""); }} />}
+      {view === "chat" && <ChatView aiStatus={chatGpt} messages={messages} conversations={conversations} conversationId={conversationId} input={input} setInput={setInput} busy={busy} sendMessage={sendMessage} confirm={confirm} selectConversation={selectConversation} newConversation={() => { setMessages([]); setConversationId(undefined); setInput(""); }} />}
       {view === "planning" && <PlanningView onPrompt={(prompt) => void sendMessage(prompt)} onContextChange={setPlanningContext} onOpenTeaching={(assignmentId) => openTeachingContext(assignmentId)} />}
       {view === "teaching" && <TeachingView onPrompt={(prompt) => void sendMessage(prompt)} onContextChange={setTeachingContext} focus={teachingFocus} onOpenStudent={openStudentProfile} />}
       {view === "classes" && <ClassesView data={data} refresh={refresh} selectedId={selectedClassroomId} select={setSelectedClassroomId} openStudent={openStudentProfile} />}
@@ -232,11 +264,12 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
       onSend={(message) => sendMessage(message, false)}
       onOpenChat={() => { setAssistantOpen(false); setView("chat"); }}
       onNewConversation={() => { setMessages([]); setConversationId(undefined); setInput(""); }}
+      aiStatus={chatGpt}
     />
   </div>;
 }
 
-function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSend, onOpenChat, onNewConversation }: {
+function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSend, onOpenChat, onNewConversation, aiStatus }: {
   open: boolean;
   setOpen: (open: boolean) => void;
   context: ChatPageContext;
@@ -246,6 +279,7 @@ function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSen
   onSend: (message: string) => Promise<void>;
   onOpenChat: () => void;
   onNewConversation: () => void;
+  aiStatus: ChatGptStatus;
 }) {
   const [value, setValue] = useState("");
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -264,14 +298,14 @@ function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSen
   return <section className="floating-alfred-panel" aria-label="Alfred, asistente contextual">
     <header>
       <AlfredAvatar size={48}/>
-      <div><strong>Alfred</strong><small><span/> Disponible en este equipo</small></div>
+      <div><strong>Alfred</strong><small><span/> {aiStatus.planEnabled ? "Usando tu plan de ChatGPT" : "Modo manual"}</small></div>
       <div className="floating-alfred-actions"><button onClick={onNewConversation} aria-label="Nueva conversación">＋</button><button onClick={() => setOpen(false)} aria-label="Cerrar Alfred">×</button></div>
     </header>
     <button className="floating-context" onClick={onOpenChat} title="Abrir el chat completo"><span>Viendo</span><strong>{context.label}</strong><i>↗</i></button>
     <div className="floating-messages" ref={messageListRef}>
       {messages.length === 0 && <div className="floating-welcome"><AlfredAvatar size={70}/><h2>Estoy contigo</h2><p>Veo que estás en <strong>{context.label}</strong>. Pregúntame por lo que aparece aquí o por cualquier otra cosa.</p></div>}
       {messages.map((message) => <div className={`floating-message ${message.role}`} key={message.id}>
-        {message.role === "assistant" && <AlfredAvatar size={25}/>}<div><div className="message-text">{message.content}</div>{message.pending && <div className={`confirmation-card ${message.pending.confirmed ? "done" : ""}`}><div><strong>{message.pending.confirmed ? "Acción confirmada" : "Pendiente de confirmación"}</strong><small>{message.pending.operation.replaceAll("_", " ")}</small></div>{message.pending.confirmed ? <span>✓ Guardado</span> : <button disabled={busy} onClick={() => void confirm(message.id, message.pending!)}>Confirmar</button>}</div>}</div>
+        {message.role === "assistant" && <AlfredAvatar size={25}/>}<div>{message.role === "assistant" ? <MarkdownMessage content={message.content}/> : <div className="message-text">{message.content}</div>}{message.pending && <div className={`confirmation-card ${message.pending.confirmed ? "done" : ""}`}><div><strong>{message.pending.confirmed ? "Acción confirmada" : "Pendiente de confirmación"}</strong><small>{message.pending.operation.replaceAll("_", " ")}</small></div>{message.pending.confirmed ? <span>✓ Guardado</span> : <button disabled={busy} onClick={() => void confirm(message.id, message.pending!)}>Confirmar</button>}</div>}</div>
       </div>)}
       {busy && <div className="floating-message assistant"><AlfredAvatar size={25}/><div className="typing"><i/><i/><i/></div></div>}
     </div>
@@ -279,8 +313,13 @@ function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSen
       <textarea disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} placeholder="Pregunta sobre esta pantalla…" aria-label="Mensaje para Alfred"/>
       <button disabled={busy || !value.trim()} aria-label="Enviar mensaje">↑</button>
     </form>
-    <small className="floating-disclaimer">Contexto local · revisa las propuestas antes de confirmarlas</small>
+    <small className="floating-disclaimer">{aiStatus.planEnabled ? "Nombres seudonimizados localmente · " : "Contexto local · "}revisa las propuestas antes de confirmarlas</small>
   </section>;
+}
+
+function ChatGptControl({ status, disconnect }: { status: ChatGptStatus; disconnect: () => Promise<void> }) {
+  if (!status.planEnabled) return <a className="chatgpt-connect" href="/api/auth/chatgpt/start"><span>✦</span> Continuar con ChatGPT</a>;
+  return <div className="chatgpt-connected" title={status.detail}><span>✦</span><div><strong>ChatGPT activo</strong><small>{status.account?.email ?? status.model ?? "Plan conectado"}</small></div><button onClick={() => void disconnect()} title="Desconectar ChatGPT">×</button></div>;
 }
 
 function minuteLabel(value: number) {
@@ -375,18 +414,18 @@ function HomeView({ data, onNavigate, onPrompt }: { data: Bootstrap | null; onNa
   </div>;
 }
 
-function ChatView({ messages, conversations, conversationId, input, setInput, busy, sendMessage, confirm, selectConversation, newConversation }: { messages: ChatMessage[]; conversations: ConversationSummary[]; conversationId?: string; input: string; setInput: (value: string) => void; busy: boolean; sendMessage: (value?: string) => Promise<void>; confirm: (id: string, pending: Pending) => Promise<void>; selectConversation: (id: string) => Promise<void>; newConversation: () => void }) {
+function ChatView({ aiStatus, messages, conversations, conversationId, input, setInput, busy, sendMessage, confirm, selectConversation, newConversation }: { aiStatus: ChatGptStatus; messages: ChatMessage[]; conversations: ConversationSummary[]; conversationId?: string; input: string; setInput: (value: string) => void; busy: boolean; sendMessage: (value?: string) => Promise<void>; confirm: (id: string, pending: Pending) => Promise<void>; selectConversation: (id: string) => Promise<void>; newConversation: () => void }) {
   const conversationRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const element = conversationRef.current;
     if (element) element.scrollTo({ top: element.scrollHeight, behavior: "auto" });
   }, [messages.length, busy, conversationId]);
   const submit = (event: FormEvent) => { event.preventDefault(); void sendMessage(); };
-  return <div className="chat-hub"><aside className="chat-history"><button className="new-chat" onClick={newConversation}>＋ Nueva conversación</button><div className="chat-history-title"><span>Conversaciones</span><small>{conversations.length}</small></div>{conversations.map((item) => <button className={conversationId === item.id ? "selected" : ""} key={item.id} onClick={() => void selectConversation(item.id)}><span>✦</span><div><strong>{item.title}</strong><small>{item.messages[0]?.content ?? "Sin mensajes"}</small><time>{new Date(item.updatedAt).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</time></div></button>)}</aside><div className="chat-page"><section className="conversation" ref={conversationRef}>
+  return <div className="chat-hub"><aside className="chat-history"><button className="new-chat" onClick={newConversation}>＋ Nueva conversación</button><div className="chat-history-title"><span>Conversaciones</span><small>{conversations.length}</small></div>{conversations.map((item) => <button className={conversationId === item.id ? "selected" : ""} key={item.id} onClick={() => void selectConversation(item.id)}><span>✦</span><div><strong>{item.title}</strong><small>{item.messages[0]?.content ? plainMarkdown(item.messages[0].content) : "Sin mensajes"}</small><time>{new Date(item.updatedAt).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</time></div></button>)}</aside><div className="chat-page"><section className="conversation" ref={conversationRef}>
     {messages.length === 0 && <div className="chat-empty"><AlfredAvatar className="orb small empty-avatar" size={56}/><h2>Hola, soy Alfred</h2><p>Puedo recordar observaciones, preparar tutorías y organizar tu aula.</p></div>}
-    {messages.map((message) => <div className={`chat-row ${message.role}`} key={message.id}>{message.role === "assistant" && <AlfredAvatar className="mini-avatar" size={30}/>}<div className="chat-bubble">{message.role === "assistant" && <small className="agent-label">Alfred</small>}<div className="message-text">{message.content}</div>{message.pending && <div className={`confirmation-card ${message.pending.confirmed ? "done" : ""}`}><div><strong>{message.pending.confirmed ? "Acción confirmada" : "Pendiente de confirmación"}</strong><small>{message.pending.operation.replaceAll("_", " ")}</small></div>{message.pending.confirmed ? <span>✓ Guardado</span> : <button disabled={busy} onClick={() => void confirm(message.id, message.pending!)}>Confirmar y guardar</button>}</div>}</div></div>)}
+    {messages.map((message) => <div className={`chat-row ${message.role}`} key={message.id}>{message.role === "assistant" && <AlfredAvatar className="mini-avatar" size={30}/>}<div className="chat-bubble">{message.role === "assistant" && <small className="agent-label">Alfred</small>}{message.role === "assistant" ? <MarkdownMessage content={message.content}/> : <div className="message-text">{message.content}</div>}{message.pending && <div className={`confirmation-card ${message.pending.confirmed ? "done" : ""}`}><div><strong>{message.pending.confirmed ? "Acción confirmada" : "Pendiente de confirmación"}</strong><small>{message.pending.operation.replaceAll("_", " ")}</small></div>{message.pending.confirmed ? <span>✓ Guardado</span> : <button disabled={busy} onClick={() => void confirm(message.id, message.pending!)}>Confirmar y guardar</button>}</div>}</div></div>)}
     {busy && <div className="chat-row assistant"><AlfredAvatar className="mini-avatar" size={30}/><div className="typing"><i/><i/><i/></div></div>}
-  </section><div className="chat-bottom"><div className="prompt-chips">{["¿Qué sabes de Lucas?", "Observaciones de esta semana", "Organiza los asientos"].map((prompt) => <button disabled={busy} onClick={() => void sendMessage(prompt)} key={prompt}>{prompt}</button>)}</div><form className="chat-composer" onSubmit={submit}><textarea disabled={busy} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} placeholder="Escribe a Alfred…"/><button disabled={busy || !input.trim()}>↑</button></form><small>Alfred puede equivocarse. Revisa siempre las propuestas antes de confirmarlas.</small></div></div></div>;
+  </section><div className="chat-bottom"><div className="prompt-chips">{["¿Qué sabes de Lucas?", "Observaciones de esta semana", "Organiza los asientos"].map((prompt) => <button disabled={busy} onClick={() => void sendMessage(prompt)} key={prompt}>{prompt}</button>)}</div><form className="chat-composer" onSubmit={submit}><textarea disabled={busy} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} placeholder="Escribe a Alfred…"/><button disabled={busy || !input.trim()}>↑</button></form><small>{aiStatus.planEnabled ? `Usando ChatGPT${aiStatus.model ? ` · ${aiStatus.model}` : ""} · los nombres se sustituyen antes de salir del equipo.` : "Modo manual · conecta ChatGPT para activar razonamientos avanzados."} Revisa siempre las propuestas antes de confirmarlas.</small></div></div></div>;
 }
 
 function ClassesView({ data, refresh, selectedId, select, openStudent }: { data: Bootstrap | null; refresh: () => Promise<void>; selectedId?: string; select: (id?: string) => void; openStudent: (id: string) => void }) {

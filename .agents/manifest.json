@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "orchestrator": "orchestrator",
+  "maxParallelAgents": 3,
+  "profiles": {
+    "economy": {
+      "purpose": "Tareas acotadas, repetibles y de lectura con bajo riesgo.",
+      "codex": { "model": "gpt-6-luna", "reasoning": "high" },
+      "claude": { "model": "haiku", "effort": "high" }
+    },
+    "balanced": {
+      "purpose": "Implementación habitual con razonamiento, herramientas y validación.",
+      "codex": { "model": "gpt-6.1-sol", "reasoning": "medium" },
+      "claude": { "model": "sonnet", "effort": "medium" }
+    },
+    "deep": {
+      "purpose": "Arquitectura, seguridad, ambigüedad alta y revisión crítica.",
+      "codex": { "model": "gpt-6.1-sol", "reasoning": "high" },
+      "claude": { "model": "opus", "effort": "high" }
+    }
+  },
+  "agents": [
+    { "id": "orchestrator", "title": "Orquestador de requisitos", "profile": "balanced", "writeScope": "coordination", "role": ".agents/roles/orchestrator.md" },
+    { "id": "architect", "title": "Arquitectura", "profile": "deep", "writeScope": "plans-only", "role": ".agents/roles/architect.md" },
+    { "id": "backend", "title": "Backend y dominio", "profile": "balanced", "writeScope": "backend", "role": ".agents/roles/backend.md" },
+    { "id": "frontend", "title": "Frontend y experiencia", "profile": "balanced", "writeScope": "frontend", "role": ".agents/roles/frontend.md" },
+    { "id": "data", "title": "Datos y persistencia", "profile": "balanced", "writeScope": "persistence", "role": ".agents/roles/data.md" },
+    { "id": "qa", "title": "QA y validación", "profile": "economy", "writeScope": "tests-only", "role": ".agents/roles/qa.md" },
+    { "id": "security", "title": "Seguridad y privacidad", "profile": "deep", "writeScope": "read-only", "role": ".agents/roles/security.md" },
+    { "id": "documentation", "title": "Documentación", "profile": "economy", "writeScope": "docs-only", "role": ".agents/roles/documentation.md" },
+    { "id": "reviewer", "title": "Revisión independiente", "profile": "deep", "writeScope": "read-only", "role": ".agents/roles/reviewer.md" }
+  ]
+}

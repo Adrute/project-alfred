@@ -6,6 +6,7 @@ describe("runtime configuration", () => {
     const config = loadConfig({});
     expect(config.HOST).toBe("127.0.0.1");
     expect(config.OLLAMA_BASE_URL).toBe("http://127.0.0.1:11434");
+    expect(config.CHATGPT_MODEL).toBe("gpt-6.1-sol");
     expect(config.DATABASE_URL).toMatch(/^file:/);
   });
 

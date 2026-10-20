@@ -1,12 +1,12 @@
-import { OllamaProvider } from "@/ai/providers/ollama-provider";
 import { LlmUnavailableError, type LlmChatMessage } from "@/ai/providers/llm-provider";
+import { getConnectedLlmProvider } from "@/ai/providers/provider-factory";
 import { sanitizeFinalAnswer } from "@/ai/final-answer";
 import { alfredToolDefinitions, executeAlfredTool, type AlfredToolResult } from "@/agents/alfred-tools";
-import { loadConfig } from "@/config/env";
 import type { ChatPageContext } from "@/domain/chat";
 import type { ConversationContextState, ConversationTurn } from "@/services/conversation-context-service";
 import { randomUUID } from "node:crypto";
 import { resolveStudents } from "@/services/student-service";
+import { createStudentPseudonymizer } from "@/services/student-pseudonymization-service";
 
 function compactState(state: ConversationContextState) {
   if (!state.lastTool) return { activeStudentIds: state.activeStudentIds, topic: state.topic, lastTool: null };
@@ -88,19 +88,16 @@ export async function runAlfredAgent(input: {
   state: ConversationContextState;
   pageContext?: ChatPageContext;
 }): Promise<AlfredAgentRunResult | null> {
-  const config = loadConfig();
-  const provider = new OllamaProvider({
-    baseUrl: config.OLLAMA_BASE_URL,
-    model: config.OLLAMA_MODEL,
-    timeoutMs: 120_000,
-  });
+  const provider = await getConnectedLlmProvider({ conversationId: input.conversationId, operation: "alfred_chat", agentId: "alfred-orchestrator" });
+  if (!provider) return null;
+  const pseudonymizer = await createStudentPseudonymizer(input.conversationId ?? "new-conversation");
   const messages: LlmChatMessage[] = [
-    { role: "system", content: buildAlfredSystemPrompt(input.state, input.pageContext) },
+    { role: "system", content: pseudonymizer.pseudonymizeText(buildAlfredSystemPrompt(input.state, input.pageContext)) },
     ...input.history.slice(-10).map((turn): LlmChatMessage => ({
       role: turn.role === "assistant" ? "assistant" : "user",
-      content: compactTurn(turn.content, turn.role === "assistant" ? 1_600 : 2_000),
+      content: pseudonymizer.pseudonymizeText(compactTurn(turn.content, turn.role === "assistant" ? 1_600 : 2_000)),
     })),
-    { role: "user", content: input.message },
+    { role: "user", content: pseudonymizer.pseudonymizeText(input.message) },
   ];
 
   let state = input.state;
@@ -118,11 +115,10 @@ export async function runAlfredAgent(input: {
     for (let step = 0; step < 4; step += 1) {
       const response = await provider.chat(messages, alfredToolDefinitions, {
         temperature: 0,
-        contextLength: config.OLLAMA_CONTEXT_LENGTH,
       });
       const calls = response.message.toolCalls ?? [];
       if (!calls.length) {
-        const content = sanitizeFinalAnswer(response.message.content);
+        const content = sanitizeFinalAnswer(pseudonymizer.depseudonymizeText(response.message.content));
         const requiresCorrection = !lastSummary && content && (
           claimsToolWorkWithoutEvidence(content)
           || (needsApplicationGrounding(input.message) && !isMissingInformationQuestion(content))
@@ -149,7 +145,8 @@ export async function runAlfredAgent(input: {
 
       messages.push(response.message);
       for (const call of calls) {
-        const toolResult = await executeAlfredTool(call.function.name, call.function.arguments, a2aContext);
+        const localArguments = pseudonymizer.depseudonymize(call.function.arguments);
+        const toolResult = await executeAlfredTool(call.function.name, localArguments, a2aContext);
         agentId = toolResult.agentId;
         pendingAction ??= toolResult.pendingAction;
         artifact ??= toolResult.artifact;
@@ -161,7 +158,7 @@ export async function runAlfredAgent(input: {
           topic: toolResult.topic,
           lastTool: {
             name: call.function.name,
-            arguments: call.function.arguments,
+            arguments: localArguments,
             result: toolResult.modelResult,
             summary: toolResult.summary.slice(0, 2_000),
           },
@@ -169,7 +166,8 @@ export async function runAlfredAgent(input: {
         messages.push({
           role: "tool",
           toolName: call.function.name,
-          content: JSON.stringify(toolResult.modelResult),
+          toolCallId: call.id,
+          content: JSON.stringify(pseudonymizer.pseudonymize(toolResult.modelResult)),
         });
       }
 

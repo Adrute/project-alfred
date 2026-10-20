@@ -18,6 +18,7 @@ export interface LlmChatMessage {
   thinking?: string;
   toolCalls?: LlmToolCall[];
   toolName?: string;
+  toolCallId?: string;
 }
 
 export interface LlmToolDefinition {

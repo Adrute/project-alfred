@@ -1,6 +1,5 @@
-import { OllamaProvider } from "@/ai/providers/ollama-provider";
+import { getConnectedLlmProvider } from "@/ai/providers/provider-factory";
 import { sanitizeFinalAnswer } from "@/ai/final-answer";
-import { loadConfig } from "@/config/env";
 import { database } from "@/lib/database";
 import { z } from "zod";
 import type { ChatPageContext } from "@/domain/chat";
@@ -16,6 +15,8 @@ import { agentForAssistantTool, executeAssistantTool, selectAssistantTool } from
 import { parseConversationContext, resolveConversationContext, serializeConversationContext } from "./conversation-context-service";
 import { agentDefinitions } from "@/agents/definitions";
 import { runAlfredAgent } from "./alfred-agent-service";
+import { createStudentPseudonymizer } from "./student-pseudonymization-service";
+import { dispatchInternalA2A } from "./internal-a2a-service";
 
 type Artifact = { type: "student" | "tutoring" | "layout" | "planning"; data: unknown };
 
@@ -88,18 +89,19 @@ function formatProfile(profile: NonNullable<Awaited<ReturnType<typeof getStudent
   ].join("\n");
 }
 
-async function fallbackConversation(message: string, history: Array<{ role: string; content: string }>, pageContext?: ChatPageContext) {
-  const config = loadConfig();
-  const provider = new OllamaProvider({ baseUrl: config.OLLAMA_BASE_URL, model: config.OLLAMA_MODEL, timeoutMs: 120_000 });
+async function fallbackConversation(conversationId: string, message: string, history: Array<{ role: string; content: string }>, pageContext?: ChatPageContext) {
+  const provider = await getConnectedLlmProvider({ conversationId, operation: "fallback_conversation", agentId: "alfred-orchestrator" });
+  if (!provider) return "La aplicación sigue disponible en modo manual. Conecta tu cuenta de ChatGPT para preguntas abiertas y razonamientos avanzados.";
   try {
+    const pseudonymizer = await createStudentPseudonymizer(conversationId);
     const transcript = history.slice(-12).map((item) => `${item.role === "user" ? "Profesora" : "Alfred"}: ${item.content}`).join("\n");
-    const response = await provider.generateStructured(`/no_think\nHistorial de esta conversación:\n${transcript || "(sin mensajes anteriores)"}\n\nPantalla visible ahora: ${pageContext ? `${pageContext.label}: ${pageContext.summary}` : "(sin contexto de pantalla)"}.\nEste contexto visual es transitorio y sirve para entender referencias; no lo trates como un hecho registrado.\n\nMensaje actual de la profesora: ${message}`, finalAnswerSchema, {
+    const response = await provider.generateStructured(pseudonymizer.pseudonymizeText(`Historial de esta conversación:\n${transcript || "(sin mensajes anteriores)"}\n\nPantalla visible ahora: ${pageContext ? `${pageContext.label}: ${pageContext.summary}` : "(sin contexto de pantalla)"}.\nEste contexto visual es transitorio y sirve para entender referencias; no lo trates como un hecho registrado.\n\nMensaje actual de la profesora: ${message}`), finalAnswerSchema, {
       temperature: 0.2,
-      system: "Eres Alfred, asistente docente local. Continúa de forma natural usando exclusivamente el historial del chat actual; nunca mezcles otras conversaciones. Devuelve solo la respuesta final, breve y en español, dentro del campo answer. No incluyas razonamientos, análisis, instrucciones internas ni comentarios sobre cómo has elaborado la respuesta. No inventes información sobre alumnos. Puedes consultar alumnos, grupos, memoria, planificación, currículo, agentes y base de datos; también puedes proponer altas de alumnos y clases, observaciones, tutorías, planes, distribuciones del aula y controles de agentes, siempre con confirmación antes de escribir. Si una acción concreta aún no está disponible, dilo con claridad y ofrece la alternativa más cercana.",
+      system: "Eres Alfred, asistente docente. Continúa de forma natural usando exclusivamente el historial del chat actual; nunca mezcles otras conversaciones. Las referencias ALUMNO_* son seudónimos locales y debes conservarlas literalmente. Devuelve solo la respuesta final, breve y en español, dentro del campo answer. No incluyas razonamientos internos ni inventes información sobre alumnos.",
     });
-    return sanitizeFinalAnswer(response.answer) || "No puedo responder a esa pregunta ahora mismo.";
+    return sanitizeFinalAnswer(pseudonymizer.depseudonymizeText(response.answer)) || "No puedo responder a esa pregunta ahora mismo.";
   } catch {
-    return "El modelo local no está disponible ahora. Aun así, puedo seguir consultando alumnos, grupos, memoria, planificación, currículo, agentes y la base de datos, además de preparar operaciones deterministas para que las confirmes.";
+    return "ChatGPT no está disponible ahora. Aun así, puedes seguir usando manualmente alumnos, grupos, planificación, currículo, agentes y la base de datos.";
   }
 }
 
@@ -126,7 +128,11 @@ export async function handleChat(input: { conversationId?: string; message: stri
   let artifact: Artifact | undefined;
   try {
     const previousState = parseConversationContext(activeConversation.contextJson);
-    const nativeResponse = process.env.NODE_ENV === "test" ? null : await runAlfredAgent({
+    const bulkStudents = parseBulkStudentCommand(input.message);
+    const containsNewStudentIdentity = Boolean(bulkStudents)
+      || /\b(?:crear|crea|añadir|añade|agregar|agrega|matricular|matricula|dar de alta)\b[\s\S]{0,45}\b(?:alumn[oa]|estudiante)\b/i.test(input.message)
+      || /\b(?:añadir|añade|agregar|agrega|matricular|matricula|dar de alta)\b[\s\S]{0,140}\b(?:a|en)\s+\d{1,2}\s*(?:[.º°]|o)?\s*(?:ESO|Primaria|Bachillerato|Infantil|FP)\b/i.test(input.message);
+    const nativeResponse = process.env.NODE_ENV === "test" || containsNewStudentIdentity ? null : await runAlfredAgent({
       conversationId: activeConversation.id,
       message: input.message,
       history,
@@ -155,6 +161,7 @@ export async function handleChat(input: { conversationId?: string; message: stri
     }
     const lower = input.message.toLocaleLowerCase("es");
     const conversationContext = await resolveConversationContext({
+      conversationId: activeConversation.id,
       message: input.message,
       history,
       previousState,
@@ -166,7 +173,6 @@ export async function handleChat(input: { conversationId?: string; message: stri
     const foodTopic = /alerg|intoler|cel[ií]a|men[uú]|comida|aliment|gluten|lactos|frutos secos|cacahu|marisco/.test(lower)
       || conversationContext.topic === "food_safety"
       || (contextualFollowUp && /alerg|intoler|cel[ií]a|men[uú]|comida|aliment|gluten|lactos|frutos secos|cacahu|marisco/.test(recentContext));
-    const bulkStudents = parseBulkStudentCommand(input.message);
     const scheduleSource = `${history.filter((item) => item.role === "user").slice(-2).map((item) => item.content).join("\n")}\n${input.message}`;
     const schedule = parseTeachingScheduleCommand(scheduleSource);
 
@@ -330,7 +336,7 @@ export async function handleChat(input: { conversationId?: string; message: stri
       await requireAgentRunning(agentId);
       content = "Perfecto. Cuéntame una observación cada vez e incluye el nombre del alumno. Te mostraré exactamente qué voy a guardar antes de hacerlo.";
     } else {
-      let decision = await selectAssistantTool(input.message, history, input.pageContext);
+      let decision = await selectAssistantTool(input.message, history, input.pageContext, activeConversation.id);
       if ((decision.tool === "student_profile" || decision.tool === "student_observations") && mentioned.length) {
         decision = { ...decision, studentQuery: mentioned.map((student) => `${student.firstName} ${student.lastName}`).join(", ") };
       }
@@ -376,9 +382,21 @@ export async function handleChat(input: { conversationId?: string; message: stri
         }
       } else {
         content = decision.tool === "general_conversation"
-          ? await fallbackConversation(input.message, history, input.pageContext)
+          ? await fallbackConversation(activeConversation.id, input.message, history, input.pageContext)
           : await executeAssistantTool(decision, input.message, history);
       }
+    }
+
+    if (agentId !== "alfred-orchestrator") {
+      await dispatchInternalA2A({ requestId: execution.id, userConversationId: activeConversation.id }, {
+        fromAgentId: "alfred-orchestrator",
+        toAgentId: agentId,
+        capability: "deterministic_chat_routing",
+        arguments: { source: "deterministic-router", hasPageContext: Boolean(input.pageContext) },
+      }, async () => ({
+        summary: `${agentId} completó la solicitud delegada por Alfred.`,
+        modelResult: { ok: true, source: "deterministic-router", pendingConfirmation: Boolean(pendingAction) },
+      }));
     }
 
     await database.conversation.update({

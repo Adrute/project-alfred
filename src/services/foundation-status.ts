@@ -1,11 +1,11 @@
 import { createAgentRegistry } from "@/agents/definitions";
-import { OllamaProvider } from "@/ai/providers/ollama-provider";
 import { loadConfig } from "@/config/env";
 import { database } from "@/lib/database";
+import { getChatGptStatus } from "./chatgpt-auth-service";
 
 export interface FoundationStatus {
   database: { available: boolean; classrooms: number; students: number; detail: string };
-  ollama: { available: boolean; detail: string; model: string; demoMode: boolean };
+  ai: { connected: boolean; planEnabled: boolean; detail: string; model: string | null };
   agents: { count: number; names: string[] };
   privacy: { host: string; outboundPolicy: string };
 }
@@ -13,13 +13,9 @@ export interface FoundationStatus {
 export async function getFoundationStatus(): Promise<FoundationStatus> {
   const config = loadConfig();
   const registry = createAgentRegistry();
-  const provider = new OllamaProvider({
-    baseUrl: config.OLLAMA_BASE_URL,
-    model: config.OLLAMA_MODEL,
-  });
 
-  const [ollama, databaseStatus] = await Promise.all([
-    provider.health(),
+  const [ai, databaseStatus] = await Promise.all([
+    getChatGptStatus(),
     Promise.all([database.classroom.count(), database.student.count()])
       .then(([classrooms, students]) => ({
         available: true,
@@ -37,14 +33,14 @@ export async function getFoundationStatus(): Promise<FoundationStatus> {
 
   return {
     database: databaseStatus,
-    ollama: { ...ollama, model: config.OLLAMA_MODEL, demoMode: config.OLLAMA_DEMO_MODE },
+    ai: { connected: ai.connected, planEnabled: ai.planEnabled, detail: ai.detail, model: ai.model },
     agents: {
       count: registry.list().length,
       names: registry.list().map((agent) => agent.name),
     },
     privacy: {
       host: config.HOST,
-      outboundPolicy: "Solo Ollama en loopback; sin proveedores cloud ni telemetría.",
+      outboundPolicy: "Datos locales; ChatGPT opcional con seudonimización previa de nombres y contactos.",
     },
   };
 }

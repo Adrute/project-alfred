@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { OllamaProvider } from "@/ai/providers/ollama-provider";
-import { loadConfig } from "@/config/env";
+import { randomUUID } from "node:crypto";
+import { getConnectedLlmProvider } from "@/ai/providers/provider-factory";
 import { getStudentProfile } from "./student-service";
+import { createStudentPseudonymizer } from "./student-pseudonymization-service";
 
 const tutoringDraftSchema = z.object({
   strengths: z.array(z.string()).max(5),
@@ -34,18 +35,20 @@ export async function prepareTutoring(studentId: string) {
   if (!facts.length) {
     generated = deterministicDraft(facts);
   } else {
-    const config = loadConfig();
-    const provider = new OllamaProvider({ baseUrl: config.OLLAMA_BASE_URL, model: config.OLLAMA_MODEL, timeoutMs: 120_000 });
-    source = "IA local (Ollama)";
+    const provider = await getConnectedLlmProvider({ operation: "prepare_tutoring", agentId: "tutoring-agent" });
+    source = "ChatGPT (nombre seudonimizado localmente)";
     try {
+      if (!provider) throw new Error("ChatGPT no está conectado.");
+      const pseudonymizer = await createStudentPseudonymizer(`tutoring:${randomUUID()}`);
       const classroom = student.enrollments[0]?.classroom;
-      generated = await provider.generateStructured(
-        `Prepara una tutoría familiar para ${student.firstName} ${student.lastName}, alumno de ${classroom?.name ?? "un grupo no especificado"} en la etapa ${classroom?.educationalStage ?? "no especificada"}. Hechos registrados: ${JSON.stringify(facts)}. No inventes hechos, problemas, preocupaciones, asignaturas, recursos, etapas educativas ni circunstancias familiares. Las preguntas, acuerdos y pasos son propuestas, no hechos. Responde en español.`,
+      const cloudResult = await provider.generateStructured(
+        pseudonymizer.pseudonymizeText(`Prepara una tutoría familiar para ${student.firstName} ${student.lastName}, alumno de ${classroom?.name ?? "un grupo no especificado"} en la etapa ${classroom?.educationalStage ?? "no especificada"}. Hechos registrados: ${JSON.stringify(facts)}. No inventes hechos, problemas, preocupaciones, asignaturas, recursos, etapas educativas ni circunstancias familiares. Las preguntas, acuerdos y pasos son propuestas, no hechos. Responde en español.`),
         tutoringDraftSchema,
         { system: "Eres un asistente docente prudente de un centro escolar. Solo puedes tratar como hechos los registros suministrados y nunca debes asumir asignaturas, problemas o etapas no indicadas." },
       );
+      generated = pseudonymizer.depseudonymize(cloudResult);
     } catch {
-      source = "Plantilla determinista (Ollama no disponible)";
+      source = "Plantilla determinista (ChatGPT no disponible)";
       generated = deterministicDraft(facts);
     }
   }

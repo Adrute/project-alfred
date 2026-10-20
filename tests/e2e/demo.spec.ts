@@ -2,7 +2,11 @@ import { test, expect } from "@playwright/test";
 
 test("complete teacher demonstration", async ({ page }) => {
   await page.goto("/");
+  const aiStatus = await page.request.get("/api/auth/chatgpt");
+  expect(aiStatus.ok()).toBe(true);
+  expect(await aiStatus.json()).toMatchObject({ connected: false, planEnabled: false });
   await expect(page.getByRole("heading", { name: "Tu día" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continuar con ChatGPT" })).toBeVisible();
   await expect(page.locator(".sidebar-brand-avatar img")).toHaveAttribute("src", /alfred-avatar/);
   await expect(page.locator(".hero-avatar img")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Agenda de hoy", exact: true })).toBeVisible();
@@ -165,11 +169,19 @@ test("complete teacher demonstration", async ({ page }) => {
 
   await page.getByRole("button", { name: /Administración/ }).click();
   await expect(page.locator(".agent-list > button")).toHaveCount(7);
+  await expect(page.getByLabel("Modelo de IA de Alfred")).toBeVisible();
+  await expect(page.getByLabel("Modelo de IA de Alfred")).toBeDisabled();
   await page.locator(".agent-list > button", { hasText: "CurriculumAgent" }).click();
+  await expect(page.getByLabel("Modelo de IA de CurriculumAgent")).toHaveCount(0);
   await page.getByRole("button", { name: /Detener/ }).click();
   await expect(page.locator(".runtime-badge")).toContainText("Detenido");
   await page.getByRole("button", { name: /Iniciar/ }).click();
   await expect(page.locator(".runtime-badge")).toContainText("Activo");
+
+  await page.getByRole("tab", { name: "Logs" }).click();
+  await expect(page.getByRole("heading", { name: "Peticiones a ChatGPT" })).toBeVisible();
+  await expect(page.getByLabel("Buscar en logs")).toBeVisible();
+  await expect(page.getByText("No hay logs para estos filtros")).toBeVisible();
 
   await page.getByRole("tab", { name: "Conversaciones A2A" }).click();
   await expect(page.getByRole("heading", { name: "Intercambios" })).toBeVisible();
@@ -178,7 +190,7 @@ test("complete teacher demonstration", async ({ page }) => {
 
   await page.getByRole("tab", { name: "Base de datos" }).click();
   await expect(page.getByRole("heading", { name: "Tablas" })).toBeVisible();
-  await expect(page.locator(".database-table-list > button")).toHaveCount(29);
+  await expect(page.locator(".database-table-list > button")).toHaveCount(30);
   await expect(page.getByRole("heading", { name: "Alumnos" })).toBeVisible();
   const conversationDeletion = page.locator(".deletion-grid article", { hasText: "Conversaciones y acciones pendientes" });
   await conversationDeletion.getByRole("button", { name: "Borrar área" }).click();

@@ -1,0 +1,8 @@
+name = "architect"
+description = "Read-only architecture specialist for ambiguous, cross-cutting or high-risk changes."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+developer_instructions = """
+Read .agents/roles/architect.md completely and follow it.
+Do not edit application files. Return a concise evidence-based design or review to the orchestrator.
+"""

@@ -33,6 +33,7 @@ export const databaseTableCatalog: Array<{ key: DatabaseTableKey; label: string;
   { key: "pendingActions", label: "Acciones pendientes", group: "Alfred" },
   { key: "agentRuntimes", label: "Estado de agentes", group: "Sistema" },
   { key: "agentExecutions", label: "Actividad de agentes", group: "Sistema" },
+  { key: "cloudAiTraces", label: "Logs de ChatGPT", group: "Sistema" },
 ];
 
 async function countTable(key: DatabaseTableKey) {
@@ -63,6 +64,7 @@ async function countTable(key: DatabaseTableKey) {
     case "agentMessages": return database.agentMessage.count();
     case "agentRuntimes": return database.agentRuntime.count();
     case "agentExecutions": return database.agentExecution.count();
+    case "cloudAiTraces": return database.cloudAiTrace.count();
     case "seatingLayouts": return database.seatingLayout.count();
     case "seatingAssignments": return database.seatingAssignment.count();
     case "pendingActions": return database.pendingAction.count();
@@ -102,6 +104,7 @@ export async function getDatabaseRecords(key: DatabaseTableKey, take = 50): Prom
     case "agentMessages": return database.agentMessage.findMany({ orderBy: order, take });
     case "agentRuntimes": return database.agentRuntime.findMany({ orderBy: { updatedAt: "desc" }, take });
     case "agentExecutions": return database.agentExecution.findMany({ orderBy: { startedAt: "desc" }, take });
+    case "cloudAiTraces": return database.cloudAiTrace.findMany({ orderBy: order, take });
     case "seatingLayouts": return database.seatingLayout.findMany({ orderBy: order, take });
     case "seatingAssignments": return database.seatingAssignment.findMany({ orderBy: [{ seatingLayoutId: "asc" }, { row: "asc" }, { column: "asc" }], take });
     case "pendingActions": return database.pendingAction.findMany({ orderBy: order, take });
@@ -136,6 +139,7 @@ export async function deleteDatabaseRecord(key: DatabaseTableKey, id: string) {
     case "agentMessages": return database.agentMessage.delete({ where: { id } });
     case "agentRuntimes": return database.agentRuntime.delete({ where: { agentId: id } });
     case "agentExecutions": return database.agentExecution.delete({ where: { id } });
+    case "cloudAiTraces": return database.cloudAiTrace.delete({ where: { id } });
     case "seatingLayouts": return database.seatingLayout.delete({ where: { id } });
     case "seatingAssignments": return database.seatingAssignment.delete({ where: { id } });
     case "pendingActions": return database.pendingAction.delete({ where: { id } });
@@ -164,10 +168,12 @@ export async function clearDatabaseScope(scope: DeletionScope) {
     }
     if (scope === "all") {
       await transaction.classroom.deleteMany();
+      await transaction.cloudAiTrace.deleteMany();
       await transaction.agentExecution.deleteMany();
       await transaction.agentRuntime.deleteMany();
     } else if (scope === "agentHistory") {
       await transaction.agentConversation.deleteMany();
+      await transaction.cloudAiTrace.deleteMany();
       await transaction.agentExecution.deleteMany();
     }
   });

@@ -5,7 +5,7 @@
 - Next.js 16, React 19, TypeScript, Tailwind 4 y ESLint.
 - Prisma 7 + SQLite, esquema, migración y seed ficticio.
 - Configuración validada y enlace exclusivo a loopback.
-- `LLMProvider`, `OllamaProvider`, contratos y registro inicial de agentes.
+- `LLMProvider`, proveedor Responses de OpenAI, contratos y registro inicial de agentes.
 - Panel de estado, endpoint de salud, pruebas y documentación.
 
 Puerta de salida: lint, tipos, pruebas, build, migración, seed y arranque verificados.
@@ -13,7 +13,7 @@ Puerta de salida: lint, tipos, pruebas, build, migración, seed y arranque verif
 ## Fase 2 · Chat y orquestación — implementada
 
 Persistir conversaciones y mensajes; implementar intención estructurada, estados visibles, errores de
-Ollama y confirmaciones. Comparar `qwen3:4b` con `qwen3:8b` y documentar latencia/calidad. No simular respuestas
+ChatGPT y confirmaciones. Evaluar la selección de herramientas con la cuenta autorizada. No simular respuestas
 salvo modo demo explícito y rotulado.
 
 ## Fase 3 · Alumnos y memoria — implementada
@@ -33,9 +33,11 @@ preferencias ponderadas; explicar conflictos; interfaz 5×5 editable y persisten
 
 ## Fase 6 · Base funcional verificable — implementada en macOS
 
-Playwright cubre el recorrido crítico, la privacidad tiene pruebas automáticas, Ollama se verificó con
-JSON estructurado y existe un guion de demostración. Pendiente únicamente la ejecución real en Windows
-11 y una captura formal de tráfico offline en ese sistema.
+Playwright cubre el recorrido crítico, la privacidad tiene pruebas automáticas y existe un comando para
+verificar ChatGPT con JSON estructurado después de iniciar sesión. Pendientes la validación interactiva
+con una cuenta autorizada, la ejecución real en Windows 11 y una captura formal de tráfico en ese sistema.
+La auditoría local de cada petición cloud se consulta en Administración → Logs y excluye credenciales y
+razonamiento interno.
 
 ## Fase 7 · Planificador docente — fase funcional 1 implementada
 

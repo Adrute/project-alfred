@@ -8,8 +8,6 @@ cp .env.example .env
 npm run db:generate
 npm run db:deploy
 npm run demo:prepare
-ollama pull qwen3.5:9b
-npm run ai:check
 npm run dev
 ```
 
@@ -17,9 +15,12 @@ Abrir `http://127.0.0.1:3000`. El seed contiene únicamente datos ficticios: tre
 asignaturas, un horario docente, unidades de Inglés y Alemán, un grupo tutor, fichas académicas,
 calificaciones, 25 alumnos y cuatro observaciones.
 
+Pulsar **Continuar con ChatGPT** y completar la autorización. Después, en otra terminal, ejecutar
+`npm run ai:check` para validar la conexión y la salida estructurada.
+
 ## Recorrido sugerido (12–15 minutos)
 
-1. En **Inicio**, señalar que todo es local y mostrar las métricas.
+1. En **Inicio**, señalar que los datos permanecen locales, que ChatGPT es opcional y mostrar las métricas.
 2. Abrir **Planificación**, navegar entre semanas y seleccionar la sesión planificada de Present
    Perfect. Mostrar actividades, duración, unidad, aula y etiqueta de estado.
 3. Abrir **Configurar horario**. Explicar que las franjas son recurrentes y que Alfred genera una sola
@@ -33,7 +34,7 @@ calificaciones, 25 alumnos y cuatro observaciones.
 8. Escribir `Lucas participa mucho en clase`. Mostrar que todavía no se ha guardado; confirmar.
 9. Recargar el navegador y preguntar `¿Qué sabes de Lucas?`. Alfred recupera la memoria persistida y
    distingue hechos registrados.
-10. Pedir `Prepárame una tutoría con la familia de Lucas`. Explicar que Ollama redacta localmente, que
+10. Conectar ChatGPT y pedir `Prepárame una tutoría con la familia de Lucas`. Explicar que ChatGPT razona con un alias, que
    las propuestas aparecen separadas de los hechos y que guardar requiere confirmación.
 11. En **Mi tutoría**, editar notas, añadir un acuerdo y marcar la reunión como realizada.
 12. Pedir `Organiza los 25 alumnos en cinco filas de cinco`. Confirmar el plano.
@@ -65,6 +66,12 @@ calificaciones, 25 alumnos y cuatro observaciones.
 4. Inícialo de nuevo y usa **Reiniciar** para comprobar el contador de reinicios.
 5. Abre **Conversaciones A2A** y enseña la solicitud, el agente destinatario, la respuesta y los datos
    estructurados del último intercambio.
+6. Con ChatGPT conectado, selecciona Alfred y elige uno de los modelos ofrecidos por la cuenta. Repite
+   con MemoryAgent y deja TutoringAgent en **Automático**.
+7. Abre **Logs**, filtra la operación `alfred chat` y muestra la petición con alias, la respuesta observable,
+   el uso de tokens y el identificador de soporte de OpenAI.
+8. Pide una respuesta con negritas y una lista; comprueba que se ve formateada tanto en el chat completo
+   como en la burbuja, sin mostrar los caracteres `**`.
 
 ## Verificación antes de enseñar
 

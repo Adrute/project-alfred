@@ -5,6 +5,7 @@ import { loadConfig } from "./src/config/env";
 loadConfig();
 
 const nextConfig: NextConfig = {
+  distDir: process.env.ALFRED_E2E === "1" ? ".next-e2e" : ".next",
   poweredByHeader: false,
 };
 

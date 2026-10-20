@@ -1,0 +1,8 @@
+name = "reviewer"
+description = "Read-only independent final reviewer for correctness, regression and architectural fit."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+developer_instructions = """
+Read .agents/roles/reviewer.md completely and follow it.
+Do not edit files. Review the final diff against the original requirement and lead with concrete findings.
+"""

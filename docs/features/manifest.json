@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "assistant-chat",
+      "title": "Alfred y conversaciones",
+      "doc": "docs/features/assistant-chat.md",
+      "keywords": ["alfred", "chat", "conversación", "contexto", "burbuja", "markdown"],
+      "entryPoints": ["src/components/alfred-app.tsx", "src/app/api/chat/route.ts", "src/services/chat-service.ts", "src/services/alfred-agent-service.ts"]
+    },
+    {
+      "id": "students-classrooms",
+      "title": "Alumnado y grupos",
+      "doc": "docs/features/students-classrooms.md",
+      "keywords": ["alumno", "alumna", "grupo", "clase", "observación", "alta masiva"],
+      "entryPoints": ["src/app/api/students/route.ts", "src/app/api/classrooms/route.ts", "src/services/student-service.ts", "src/services/classroom-service.ts"]
+    },
+    {
+      "id": "teaching",
+      "title": "Asignaturas y seguimiento académico",
+      "doc": "docs/features/teaching.md",
+      "keywords": ["asignatura", "calificación", "evaluación", "participación", "tareas", "progreso"],
+      "entryPoints": ["src/components/teaching-view.tsx", "src/app/api/teaching/route.ts", "src/services/teaching-service.ts", "src/domain/teaching.ts"]
+    },
+    {
+      "id": "tutoring",
+      "title": "Tutoría y seguimiento tutorial",
+      "doc": "docs/features/tutoring.md",
+      "keywords": ["tutoría", "tutorando", "familia", "reunión", "acuerdo", "grupo tutor"],
+      "entryPoints": ["src/components/tutor-group-view.tsx", "src/app/api/tutor-group/route.ts", "src/services/tutoring-service.ts", "src/services/tutor-group-service.ts"]
+    },
+    {
+      "id": "planning-curriculum",
+      "title": "Planificación, horario y currículo",
+      "doc": "docs/features/planning-curriculum.md",
+      "keywords": ["planificación", "horario", "sesión", "unidad", "contenido", "calendario"],
+      "entryPoints": ["src/components/planning-view.tsx", "src/app/api/planning/route.ts", "src/services/planning-service.ts", "src/domain/planning.ts"]
+    },
+    {
+      "id": "classroom-layout",
+      "title": "Organización del aula",
+      "doc": "docs/features/classroom-layout.md",
+      "keywords": ["aula", "asiento", "distribución", "restricción", "adyacencia"],
+      "entryPoints": ["src/app/api/layouts/[id]/swap/route.ts", "src/services/classroom-service.ts", "src/domain/seating.ts"]
+    },
+    {
+      "id": "administration-agents-a2a",
+      "title": "Agentes, estado y A2A",
+      "doc": "docs/features/administration-agents-a2a.md",
+      "keywords": ["administración", "agente", "a2a", "arrancar", "parar", "reiniciar"],
+      "entryPoints": ["src/components/admin-view.tsx", "src/services/agent-admin-service.ts", "src/services/internal-a2a-service.ts", "src/services/a2a-service.ts"]
+    },
+    {
+      "id": "cloud-ai-privacy-logs",
+      "title": "ChatGPT, privacidad y logs",
+      "doc": "docs/features/cloud-ai-privacy-logs.md",
+      "keywords": ["chatgpt", "openai", "privacidad", "seudónimo", "log", "modelo"],
+      "entryPoints": ["src/ai/providers/openai-responses-provider.ts", "src/services/chatgpt-auth-service.ts", "src/services/student-pseudonymization-service.ts", "src/services/cloud-ai-log-service.ts"]
+    },
+    {
+      "id": "database-administration",
+      "title": "Administración de datos",
+      "doc": "docs/features/database-administration.md",
+      "keywords": ["base de datos", "sqlite", "borrar", "registro", "prisma", "migración"],
+      "entryPoints": ["src/app/api/admin/database/route.ts", "src/services/database-admin-service.ts", "src/repositories/database-admin-repository.ts", "prisma/schema.prisma"]
+    }
+  ]
+}

@@ -19,6 +19,8 @@ let alfredToolsModule: typeof import("@/agents/alfred-tools");
 let internalA2AModule: typeof import("@/services/internal-a2a-service");
 let alfredAgentModule: typeof import("@/services/alfred-agent-service");
 let conversationContextModule: typeof import("@/services/conversation-context-service");
+let cloudAiLogModule: typeof import("@/services/cloud-ai-log-service");
+let agentAiSettingsModule: typeof import("@/services/agent-ai-settings-service");
 let classroomId = "";
 
 describe("observation confirmation flow", () => {
@@ -30,6 +32,8 @@ describe("observation confirmation flow", () => {
     sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261017090000_conversation_focus_context/migration.sql"), "utf8"));
     sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261018010000_internal_a2a_audit/migration.sql"), "utf8"));
     sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261018152339_teacher_subject_and_tutor_workspace/migration.sql"), "utf8"));
+    sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261019120000_cloud_ai_request_logs/migration.sql"), "utf8"));
+    sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261020090000_agent_ai_model_preferences/migration.sql"), "utf8"));
     sqlite.close();
     process.env.DATABASE_URL = `file:${dbPath}`;
     databaseModule = await import("@/lib/database");
@@ -46,6 +50,8 @@ describe("observation confirmation flow", () => {
     internalA2AModule = await import("@/services/internal-a2a-service");
     alfredAgentModule = await import("@/services/alfred-agent-service");
     conversationContextModule = await import("@/services/conversation-context-service");
+    cloudAiLogModule = await import("@/services/cloud-ai-log-service");
+    agentAiSettingsModule = await import("@/services/agent-ai-settings-service");
     const classroom = await databaseModule.database.classroom.create({ data: { name: "Prueba", academicYear: "2026-2027", educationalStage: "ESO" } });
     classroomId = classroom.id;
     for (const firstName of ["Lucas", "Marcos", "Elena", "Pablo"]) {
@@ -192,62 +198,21 @@ describe("observation confirmation flow", () => {
   });
 
   it("treats a general message for families as conversation, not as a tutoring request", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        model: "qwen3.5:9b",
-        message: { role: "assistant", content: JSON.stringify({
-          tool: "general_conversation",
-          studentQuery: "",
-          responseStyle: "brief",
-        }) },
-        done: true,
-      }), { status: 200, headers: { "content-type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        model: "qwen3.5:9b",
-        message: { role: "assistant", content: JSON.stringify({
-          answer: "Claro. ¿Qué información quieres comunicarles?",
-        }) },
-        done: true,
-      }), { status: 200, headers: { "content-type": "application/json" } }));
-    try {
-      const response = await chatModule.handleChat({
-        message: "Ayúdame a redactar un mensaje amable para las familias",
-      });
-      expect(response.message.agentId).toBe("alfred-orchestrator");
-      expect(response.message.content).toBe("Claro. ¿Qué información quieres comunicarles?");
-      expect(response.pendingAction).toBeNull();
-    } finally {
-      fetchMock.mockRestore();
-    }
+    const response = await chatModule.handleChat({
+      message: "Ayúdame a redactar un mensaje amable para las familias",
+    });
+    expect(response.message.agentId).toBe("alfred-orchestrator");
+    expect(response.message.content).toContain("modo manual");
+    expect(response.pendingAction).toBeNull();
   });
 
-  it("forces a tool call when the model asks for details of an already unambiguous student", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        model: "qwen3.5:9b",
-        message: { role: "assistant", content: "Necesito el nombre completo de Lucas y saber en qué clase está." },
-        done: true,
-      }), { status: 200, headers: { "content-type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        model: "qwen3.5:9b",
-        message: { role: "assistant", content: "", tool_calls: [{ function: {
-          name: "propose_record_observation",
-          arguments: { studentReferences: ["Lucas"], content: "Lucas participa mucho en clase", category: "participation", relationshipType: "none" },
-        } }] },
-        done: true,
-      }), { status: 200, headers: { "content-type": "application/json" } }));
-    try {
-      const result = await alfredAgentModule.runAlfredAgent({
-        message: "Lucas participa mucho en clase",
-        history: [],
-        state: conversationContextModule.conversationContextStateSchema.parse({}),
-      });
-      expect(result?.pendingAction?.operation).toBe("record_observation");
-      expect(result?.content).toContain("observación para Lucas Prueba");
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    } finally {
-      fetchMock.mockRestore();
-    }
+  it("does not invoke a cloud model without an explicit ChatGPT connection", async () => {
+    const result = await alfredAgentModule.runAlfredAgent({
+      message: "Lucas participa mucho en clase",
+      history: [],
+      state: conversationContextModule.conversationContextStateSchema.parse({}),
+    });
+    expect(result).toBeNull();
   });
 
   it("inherits student filters when the teacher asks who the counted students are", async () => {
@@ -280,6 +245,8 @@ describe("observation confirmation flow", () => {
   it("shows agent statistics and enforces start, stop and restart controls", async () => {
     const dashboard = await agentAdminModule.getAgentDashboard();
     expect(dashboard).toHaveLength(7);
+    expect(dashboard.find((agent) => agent.id === "alfred-orchestrator")?.ai.usesAi).toBe(true);
+    expect(dashboard.find((agent) => agent.id === "classroom-agent")?.ai.usesAi).toBe(false);
     expect(dashboard.find((agent) => agent.id === "memory-agent")?.statistics.totalExecutions).toBeGreaterThan(0);
 
     await agentAdminModule.controlAgent("curriculum-agent", "stop");
@@ -289,6 +256,17 @@ describe("observation confirmation flow", () => {
     const restarted = await agentAdminModule.controlAgent("curriculum-agent", "restart");
     expect(restarted.status).toBe("running");
     expect(restarted.restartCount).toBe(1);
+
+    await expect(agentAiSettingsModule.setAgentAiModel("alfred-orchestrator", null)).resolves.toMatchObject({ aiModel: null });
+    await databaseModule.database.agentRuntime.update({
+      where: { agentId: "alfred-orchestrator" },
+      data: { aiModel: "gpt-test-agent-model" },
+    });
+    await expect(agentAiSettingsModule.resolveAgentAiModel("alfred-orchestrator", "gpt-default"))
+      .resolves.toBe("gpt-test-agent-model");
+    await expect(agentAiSettingsModule.resolveAgentAiModel("classroom-agent", "gpt-default"))
+      .resolves.toBe("gpt-default");
+    await expect(agentAiSettingsModule.setAgentAiModel("classroom-agent", null)).rejects.toThrow(/no utiliza un modelo generativo/);
   });
 
   it("uses the AI orchestrator to choose structured student queries", async () => {
@@ -541,9 +519,37 @@ describe("observation confirmation flow", () => {
     expect((await teachingModule.getTeachingPortfolio())[0]).toHaveProperty("subject");
   });
 
+  it("stores searchable pseudonymized ChatGPT request logs and their observable response", async () => {
+    const conversation = await databaseModule.database.conversation.create({ data: { title: "Auditoría" } });
+    const startedAt = new Date();
+    const traceId = await cloudAiLogModule.cloudAiTraceSink.start({
+      context: { conversationId: conversation.id, operation: "alfred_chat", agentId: "alfred-orchestrator" },
+      provider: "openai-chatgpt",
+      endpoint: "https://api.openai.com/v1/responses",
+      model: "gpt-test",
+      requestBody: { model: "gpt-test", input: [{ role: "user", content: "Háblame de ALUMNO_ABCDEF1234" }], store: false },
+      startedAt,
+    });
+    await cloudAiLogModule.cloudAiTraceSink.complete(traceId, {
+      responseBody: { id: "resp_test", status: "completed", output: [{ type: "message", content: "ALUMNO_ABCDEF1234" }] },
+      responseId: "resp_test",
+      requestId: "req_test",
+      inputTokens: 11,
+      outputTokens: 4,
+      totalTokens: 15,
+      durationMs: 120,
+      finishedAt: new Date(),
+    });
+    const dashboard = await cloudAiLogModule.getCloudAiLogDashboard({ query: "ABCDEF1234", status: "all", model: "all", operation: "all", range: "all", limit: 100 });
+    expect(dashboard.summary.total).toBe(1);
+    expect(dashboard.logs[0]).toEqual(expect.objectContaining({ status: "completed", requestId: "req_test", agentId: "alfred-orchestrator", totalTokens: 15, studentAliasCount: 1 }));
+    expect(JSON.stringify(dashboard.logs[0])).toContain("ALUMNO_ABCDEF1234");
+    expect(JSON.stringify(dashboard.logs[0])).not.toMatch(/Lucas|Elena|Marcos|Pablo/);
+  });
+
   it("browses allowlisted tables and requires exact confirmation before deleting", async () => {
     const overview = await databaseAdminModule.getDatabaseOverview("students");
-    expect(overview.tables).toHaveLength(29);
+    expect(overview.tables).toHaveLength(30);
     expect(overview.selected.label).toBe("Alumnos");
     expect(overview.selected.rows.length).toBeGreaterThan(0);
 

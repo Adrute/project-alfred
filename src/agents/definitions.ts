@@ -10,6 +10,7 @@ export const agentDefinitions: readonly AgentDefinition[] = [
     id: "alfred-orchestrator",
     name: "Alfred",
     description: "Interpreta la petición y coordina agentes especializados.",
+    usesAi: true,
     capabilities: [
       {
         id: "orchestrate-request",
@@ -66,6 +67,7 @@ export const agentDefinitions: readonly AgentDefinition[] = [
     id: "tutoring-agent",
     name: "TutoringAgent",
     description: "Prepara tutorías a partir de hechos registrados y propuestas explícitas.",
+    usesAi: true,
     capabilities: [
       {
         id: "prepare-tutoring",
@@ -108,6 +110,7 @@ export const agentDefinitions: readonly AgentDefinition[] = [
     id: "memory-agent",
     name: "MemoryAgent",
     description: "Recupera memoria conversacional y estructurada con trazabilidad.",
+    usesAi: true,
     capabilities: [
       {
         id: "search-memory",

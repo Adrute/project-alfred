@@ -12,6 +12,7 @@ export interface AgentDefinition {
   id: string;
   name: string;
   description: string;
+  usesAi?: boolean;
   capabilities: readonly AgentCapability[];
 }
 

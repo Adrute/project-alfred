@@ -20,8 +20,12 @@ Todas las capturas se generan con datos completamente ficticios mediante `npm ru
 
 | Organización del aula | Agentes |
 |---|---|
-| ![Organización del aula](09-organizacion-aula.png) | ![Administración de agentes](10-administracion-agentes.png) |
+| ![Organización del aula](09-organizacion-aula.png) | ![Administración de agentes y modelos](10-administracion-agentes.png) |
 
-| Conversaciones A2A | Base de datos |
+| Conversaciones A2A | Logs de ChatGPT |
 |---|---|
-| ![Trazabilidad A2A](11-administracion-a2a.png) | ![Administrador de base de datos](12-administracion-base-datos.png) |
+| ![Trazabilidad A2A](11-administracion-a2a.png) | ![Auditoría de peticiones a ChatGPT](12-administracion-logs.png) |
+
+| Base de datos |
+|---|
+| ![Administrador de base de datos](13-administracion-base-datos.png) |

@@ -358,15 +358,50 @@ model TutoringAgreement {
 }
 
 model Conversation {
-  id          String    @id @default(cuid())
-  title       String
-  contextJson String    @default("{}")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  messages    Message[]
+  id                 String         @id @default(cuid())
+  title              String
+  contextJson        String         @default("{}")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  messages           Message[]
   agentConversations AgentConversation[]
+  cloudAiTraces      CloudAiTrace[]
 
   @@index([updatedAt])
+}
+
+/// Local audit entry for one outbound cloud-AI request. Request bodies contain
+/// the already-pseudonymized payload sent over the wire and never credentials.
+model CloudAiTrace {
+  id                String        @id @default(cuid())
+  conversationId    String?
+  agentId           String?
+  provider          String        @default("openai-chatgpt")
+  endpoint          String        @default("https://api.openai.com/v1/responses")
+  operation         String        @default("llm_request")
+  model             String
+  status            String        @default("running")
+  requestBodyJson   String
+  responseBodyJson  String?
+  responseId        String?
+  requestId         String?
+  inputTokens       Int?
+  outputTokens      Int?
+  totalTokens       Int?
+  durationMs        Int?
+  studentAliasCount Int           @default(0)
+  errorCode         String?
+  errorMessage      String?
+  createdAt         DateTime      @default(now())
+  finishedAt        DateTime?
+  conversation      Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([model, createdAt])
+  @@index([operation, createdAt])
+  @@index([agentId, createdAt])
+  @@index([conversationId, createdAt])
 }
 
 /// Auditable A2A exchange for one Alfred orchestration request. It stores only
@@ -422,6 +457,7 @@ model Message {
 model AgentRuntime {
   agentId      String    @id
   status       String    @default("running")
+  aiModel      String?
   startedAt    DateTime?
   stoppedAt    DateTime?
   restartedAt  DateTime?

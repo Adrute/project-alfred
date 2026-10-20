@@ -6,10 +6,12 @@ interface AgentCapability { id: string; description: string; mutatesData: boolea
 interface AgentExecution { id: string; operation: string; status: string; startedAt: string; finishedAt: string | null; error: string | null }
 interface AgentInfo {
   id: string; name: string; description: string; capabilities: AgentCapability[];
+  ai: { usesAi: boolean; configuredModel: string | null };
   runtime: { status: "running" | "stopped"; startedAt: string | null; stoppedAt: string | null; restartedAt: string | null; restartCount: number };
   statistics: { totalExecutions: number; executionsToday: number; completed: number; failed: number; successRate: number; averageDurationMs: number; lastExecutionAt: string | null; operations: Array<{ operation: string; count: number }> };
   recentExecutions: AgentExecution[];
 }
+interface AiModelCatalog { connected: boolean; defaultModel: string | null; models: Array<{ id: string; label: string }> }
 interface DatabaseTable { key: string; label: string; group: string; count: number }
 interface DatabaseScope { key: string; label: string; confirmation: string; total: boolean }
 interface DatabaseOverview {
@@ -22,6 +24,19 @@ interface DatabaseOverview {
 interface A2AMessage { id: string; protocol: string; messageId: string; fromAgentId: string; toAgentId: string; kind: "request" | "response" | "error"; capability: string; content: string; payload: unknown; createdAt: string }
 interface A2AConversation { id: string; requestId: string; title: string; status: string; createdAt: string; finishedAt: string | null; messages: A2AMessage[] }
 interface A2AHistory { protocol: string; totalConversations: number; totalMessages: number; conversations: A2AConversation[] }
+interface CloudAiLog {
+  id: string; conversationId: string | null; agentId: string | null; provider: string; endpoint: string; operation: string; model: string;
+  status: "running" | "completed" | "failed"; requestBody: unknown; responseBody: unknown; responseId: string | null;
+  requestId: string | null; inputTokens: number | null; outputTokens: number | null; totalTokens: number | null;
+  durationMs: number | null; studentAliasCount: number; errorCode: string | null; errorMessage: string | null;
+  createdAt: string; finishedAt: string | null;
+}
+interface CloudAiLogDashboard {
+  summary: { total: number; completed: number; failed: number; running: number; successRate: number; averageDurationMs: number; totalTokens: number };
+  filters: { models: Array<{ value: string; count: number }>; operations: Array<{ value: string; count: number }> };
+  histogram: Array<{ at: string; count: number }>;
+  logs: CloudAiLog[];
+}
 
 async function getAgents(): Promise<AgentInfo[]> {
   const response = await fetch("/api/admin/agents", { cache: "no-store" });
@@ -30,13 +45,22 @@ async function getAgents(): Promise<AgentInfo[]> {
   return body;
 }
 
+async function getAiModels(): Promise<AiModelCatalog> {
+  const response = await fetch("/api/admin/ai-models", { cache: "no-store" });
+  const body = await response.json() as AiModelCatalog & { error?: string };
+  if (!response.ok) throw new Error(body.error ?? "No se pudo cargar el catálogo de modelos.");
+  return body;
+}
+
 export function AdminView({ onContextChange, onDataChanged }: { onContextChange?: (summary: string) => void; onDataChanged?: () => Promise<void> }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [selectedId, setSelectedId] = useState("alfred-orchestrator");
   const [busyId, setBusyId] = useState<string>();
   const [error, setError] = useState("");
-  const [section, setSection] = useState<"agents" | "a2a" | "database">("agents");
+  const [modelCatalog, setModelCatalog] = useState<AiModelCatalog>({ connected: false, defaultModel: null, models: [] });
+  const [section, setSection] = useState<"agents" | "a2a" | "logs" | "database">("agents");
   useEffect(() => { void getAgents().then(setAgents).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "No se pudieron cargar los agentes.")); }, []);
+  useEffect(() => { void getAiModels().then(setModelCatalog).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "No se pudo cargar el catálogo de modelos.")); }, []);
   const selected = agents.find((agent) => agent.id === selectedId) ?? agents[0];
   const totals = useMemo(() => ({
     running: agents.filter((agent) => agent.runtime.status === "running").length,
@@ -46,6 +70,8 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
   useEffect(() => {
     onContextChange?.(section === "database"
       ? "Administrador local de la base de datos: tablas, registros y herramientas de borrado seguro."
+      : section === "logs"
+      ? "Logs auditables de las peticiones seudonimizadas enviadas a ChatGPT y sus respuestas observables."
       : section === "a2a"
       ? "Trazabilidad de conversaciones A2A entre Alfred y los agentes especializados, con solicitudes y respuestas estructuradas."
       : selected
@@ -64,10 +90,21 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
     finally { setBusyId(undefined); }
   };
 
+  const configureModel = async (agentId: string, model: string) => {
+    setBusyId(agentId); setError("");
+    try {
+      const response = await fetch(`/api/admin/agents/${agentId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: model || null }) });
+      const body = await response.json() as { agents?: AgentInfo[]; error?: string };
+      if (!response.ok || !body.agents) throw new Error(body.error ?? "No se pudo configurar el modelo.");
+      setAgents(body.agents);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo configurar el modelo."); }
+    finally { setBusyId(undefined); }
+  };
+
   return <div className="admin-page">
-    <div className="admin-tabs" role="tablist" aria-label="Administración"><button role="tab" aria-selected={section === "agents"} className={section === "agents" ? "active" : ""} onClick={() => setSection("agents")}>Agentes</button><button role="tab" aria-selected={section === "a2a"} className={section === "a2a" ? "active" : ""} onClick={() => setSection("a2a")}>Conversaciones A2A</button><button role="tab" aria-selected={section === "database"} className={section === "database" ? "active" : ""} onClick={() => setSection("database")}>Base de datos</button></div>
+    <div className="admin-tabs" role="tablist" aria-label="Administración"><button role="tab" aria-selected={section === "agents"} className={section === "agents" ? "active" : ""} onClick={() => setSection("agents")}>Agentes</button><button role="tab" aria-selected={section === "a2a"} className={section === "a2a" ? "active" : ""} onClick={() => setSection("a2a")}>Conversaciones A2A</button><button role="tab" aria-selected={section === "logs"} className={section === "logs" ? "active" : ""} onClick={() => setSection("logs")}>Logs</button><button role="tab" aria-selected={section === "database"} className={section === "database" ? "active" : ""} onClick={() => setSection("database")}>Base de datos</button></div>
     {error && <div className="error-banner">{error}<button onClick={() => setError("")}>×</button></div>}
-    {section === "database" ? <DatabaseAdmin onDataChanged={async () => { await getAgents().then(setAgents); await onDataChanged?.(); }} /> : section === "a2a" ? <A2AAdmin/> : <>
+    {section === "database" ? <DatabaseAdmin onDataChanged={async () => { await getAgents().then(setAgents); await onDataChanged?.(); }} /> : section === "logs" ? <LogsAdmin/> : section === "a2a" ? <A2AAdmin/> : <>
     <section className="admin-summary">
       <article><span className="status-dot is-ready"/><div><strong>{totals.running}</strong><small>Agentes activos</small></div></article>
       <article><span className="status-dot is-stopped"/><div><strong>{totals.stopped}</strong><small>Agentes detenidos</small></div></article>
@@ -75,16 +112,117 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
       <article><span>◉</span><div><strong>{agents.reduce((sum, item) => sum + item.statistics.totalExecutions, 0)}</strong><small>Ejecuciones totales</small></div></article>
     </section>
     <div className="admin-layout">
-      <section className="agent-list"><div className="agent-list-head"><p className="eyebrow">Sistema multiagente</p><h2>Agentes</h2><small>Módulos locales de Alfred</small></div>{agents.map((agent) => <button className={selected?.id === agent.id ? "selected" : ""} key={agent.id} onClick={() => setSelectedId(agent.id)}><span className={`agent-state ${agent.runtime.status}`}/><div><strong>{agent.name}</strong><small>{agent.capabilities.length} capacidades · {agent.statistics.totalExecutions} usos</small></div><b>›</b></button>)}</section>
+      <section className="agent-list"><div className="agent-list-head"><p className="eyebrow">Sistema multiagente</p><h2>Agentes</h2><small>Módulos locales de Alfred</small></div>{agents.map((agent) => <button className={selected?.id === agent.id ? "selected" : ""} key={agent.id} onClick={() => setSelectedId(agent.id)}><span className={`agent-state ${agent.runtime.status}`}/><div><strong>{agent.name}</strong><small>{agent.capabilities.length} capacidades · {agent.statistics.totalExecutions} usos{agent.ai.usesAi ? " · IA" : ""}</small></div><b>›</b></button>)}</section>
       <section className="agent-detail">{selected ? <>
         <header><div><p className="eyebrow">Detalle del agente</p><h2>{selected.name}</h2><p>{selected.description}</p></div><span className={`runtime-badge ${selected.runtime.status}`}>{selected.runtime.status === "running" ? "● Activo" : "■ Detenido"}</span></header>
         <div className="agent-controls"><button disabled={busyId === selected.id || selected.runtime.status === "running"} onClick={() => void control(selected.id, "start")}>▶ Iniciar</button><button disabled={busyId === selected.id || selected.runtime.status === "stopped"} onClick={() => void control(selected.id, "stop")}>■ Detener</button><button disabled={busyId === selected.id} onClick={() => void control(selected.id, "restart")}>↻ Reiniciar</button><small>{busyId === selected.id ? "Aplicando…" : `Reinicios: ${selected.runtime.restartCount}`}</small></div>
+        {selected.ai.usesAi && <div className="agent-model-config"><div><span>✦</span><div><strong>Modelo de inteligencia artificial</strong><small>{modelCatalog.connected ? "Elige el modelo para las tareas generativas de este agente." : "Conecta ChatGPT para consultar y seleccionar los modelos disponibles."}</small></div></div><label>Modelo<select aria-label={`Modelo de IA de ${selected.name}`} disabled={!modelCatalog.connected || busyId === selected.id} value={selected.ai.configuredModel ?? ""} onChange={(event) => void configureModel(selected.id, event.target.value)}><option value="">Automático{modelCatalog.defaultModel ? ` · ${modelCatalog.defaultModel}` : ""}</option>{selected.ai.configuredModel && !modelCatalog.models.some((model) => model.id === selected.ai.configuredModel) && <option value={selected.ai.configuredModel}>{selected.ai.configuredModel} · no disponible ahora</option>}{modelCatalog.models.map((model) => <option key={model.id} value={model.id}>{model.label}{model.label !== model.id ? ` · ${model.id}` : ""}</option>)}</select></label><p>Modelo efectivo: <strong>{selected.ai.configuredModel ?? modelCatalog.defaultModel ?? "modo manual"}</strong>. Las peticiones aparecerán con este valor en Logs.</p></div>}
         <div className="agent-metrics"><article><strong>{selected.statistics.totalExecutions}</strong><small>Ejecuciones</small></article><article><strong>{selected.statistics.successRate}%</strong><small>Éxito</small></article><article><strong>{selected.statistics.averageDurationMs} ms</strong><small>Duración media</small></article><article><strong>{selected.statistics.failed}</strong><small>Errores</small></article></div>
         <div className="agent-section"><h3>Capacidades</h3>{selected.capabilities.map((item) => <article className="capability-row" key={item.id}><span>{item.mutatesData ? "Escritura" : "Lectura"}</span><div><strong>{item.id}</strong><p>{item.description}</p></div></article>)}</div>
         <div className="agent-section"><h3>Actividad reciente</h3>{selected.recentExecutions.length ? selected.recentExecutions.map((item) => <article className="execution-row" key={item.id}><span className={`status-dot ${item.status === "completed" ? "is-ready" : "is-stopped"}`}/><div><strong>{item.operation}</strong><small>{new Date(item.startedAt).toLocaleString("es-ES")}</small>{item.error && <p>{item.error}</p>}</div><time>{item.finishedAt ? `${new Date(item.finishedAt).getTime() - new Date(item.startedAt).getTime()} ms` : "En curso"}</time></article>) : <p className="muted-copy">Este agente todavía no tiene ejecuciones.</p>}</div>
       </> : <div className="detail-placeholder">Cargando agentes…</div>}</section>
     </div>
     </>}
+  </div>;
+}
+
+function statusLabel(status: CloudAiLog["status"]) {
+  if (status === "completed") return "Completada";
+  if (status === "failed") return "Error";
+  return "En curso";
+}
+
+function prettyJson(value: unknown) {
+  return value === null ? "Sin contenido" : JSON.stringify(value, null, 2);
+}
+
+async function getCloudAiLogs(filters: { query: string; status: string; model: string; operation: string; range: string }) {
+  const parameters = new URLSearchParams({ ...filters, limit: "100" });
+  const response = await fetch(`/api/admin/logs?${parameters}`, { cache: "no-store" });
+  const body = await response.json() as CloudAiLogDashboard & { error?: string };
+  if (!response.ok) throw new Error(body.error ?? "No se pudieron cargar los logs de ChatGPT.");
+  return body;
+}
+
+function LogsAdmin() {
+  const [data, setData] = useState<CloudAiLogDashboard>();
+  const [selectedId, setSelectedId] = useState<string>();
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [model, setModel] = useState("all");
+  const [operation, setOperation] = useState("all");
+  const [range, setRange] = useState("7d");
+  const [detailTab, setDetailTab] = useState<"request" | "response" | "metadata">("request");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [showDelete, setShowDelete] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+
+  const load = async () => {
+    setBusy(true); setError("");
+    try {
+      const body = await getCloudAiLogs({ query, status, model, operation, range });
+      setData(body);
+      setSelectedId((current) => body.logs.some((item) => item.id === current) ? current : body.logs[0]?.id);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudieron cargar los logs de ChatGPT."); }
+    finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    let active = true;
+    void getCloudAiLogs({ query, status, model, operation, range })
+      .then((body) => {
+        if (!active) return;
+        setData(body);
+        setSelectedId((current) => body.logs.some((item) => item.id === current) ? current : body.logs[0]?.id);
+      })
+      .catch((caught: unknown) => {
+        if (active) setError(caught instanceof Error ? caught.message : "No se pudieron cargar los logs de ChatGPT.");
+      });
+    return () => { active = false; };
+  }, [query, status, model, operation, range]);
+  const selected = data?.logs.find((item) => item.id === selectedId) ?? data?.logs[0];
+  const maxBucket = Math.max(1, ...(data?.histogram.map((item) => item.count) ?? [1]));
+  const clear = async () => {
+    if (confirmation !== "BORRAR LOGS") return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/admin/logs", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation }) });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "No se pudieron borrar los logs.");
+      setShowDelete(false); setConfirmation(""); setSelectedId(undefined);
+      await load();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudieron borrar los logs."); setBusy(false); }
+  };
+
+  if (!data) return <div className="database-loading">{error || "Cargando logs de ChatGPT…"}</div>;
+  return <div className="logs-admin">
+    {error && <div className="error-banner">{error}<button onClick={() => setError("")}>×</button></div>}
+    <section className="logs-toolbar">
+      <form onSubmit={(event) => { event.preventDefault(); setQuery(queryInput); }}><span>⌕</span><input aria-label="Buscar en logs" value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Buscar en petición, respuesta, operación o ID…"/><button type="submit">Buscar</button></form>
+      <button className="logs-refresh" disabled={busy} onClick={() => void load()}>↻ Actualizar</button>
+      <button className="logs-delete" disabled={busy || data.summary.total === 0} onClick={() => setShowDelete(true)}>Borrar logs</button>
+    </section>
+    <section className="logs-filters" aria-label="Filtros de logs">
+      <label>Periodo<select value={range} onChange={(event) => setRange(event.target.value)}><option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option><option value="all">Todo el histórico</option></select></label>
+      <label>Estado<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Todos</option><option value="completed">Completadas</option><option value="failed">Con error</option><option value="running">En curso</option></select></label>
+      <label>Modelo<select value={model} onChange={(event) => setModel(event.target.value)}><option value="all">Todos</option>{data.filters.models.map((item) => <option key={item.value} value={item.value}>{item.value} ({item.count})</option>)}</select></label>
+      <label>Operación<select value={operation} onChange={(event) => setOperation(event.target.value)}><option value="all">Todas</option>{data.filters.operations.map((item) => <option key={item.value} value={item.value}>{item.value.replaceAll("_", " ")} ({item.count})</option>)}</select></label>
+    </section>
+    <section className="logs-summary admin-summary">
+      <article><span>◎</span><div><strong>{data.summary.total}</strong><small>Peticiones en el periodo</small></div></article>
+      <article><span className="status-dot is-ready"/><div><strong>{data.summary.successRate}%</strong><small>Tasa de éxito</small></div></article>
+      <article><span>◷</span><div><strong>{data.summary.averageDurationMs} ms</strong><small>Duración media</small></div></article>
+      <article><span>∑</span><div><strong>{data.summary.totalTokens.toLocaleString("es-ES")}</strong><small>Tokens registrados</small></div></article>
+    </section>
+    <section className="logs-histogram" aria-label="Peticiones a ChatGPT en el tiempo"><header><div><p className="eyebrow">Actividad</p><h2>Peticiones a ChatGPT</h2></div><small>{data.summary.completed} completadas · {data.summary.failed} errores · {data.summary.running} en curso</small></header><div className="histogram-bars">{data.histogram.length ? data.histogram.map((bucket) => <div key={bucket.at} title={`${new Date(bucket.at).toLocaleString("es-ES")}: ${bucket.count}`}><span style={{ height: `${Math.max(8, (bucket.count / maxBucket) * 100)}%` }}/><small>{new Date(bucket.at).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" })}</small></div>) : <p>No hay actividad en este periodo.</p>}</div></section>
+    <section className="logs-layout">
+      <div className="logs-list"><header><div><p className="eyebrow">Resultados</p><h2>{data.logs.length} eventos</h2></div>{busy && <small>Actualizando…</small>}</header>{data.logs.length ? data.logs.map((log) => <button key={log.id} className={selected?.id === log.id ? "selected" : ""} onClick={() => { setSelectedId(log.id); setDetailTab("request"); }}><span className={`log-status ${log.status}`}/><div><strong>{log.operation.replaceAll("_", " ")}</strong><small>{log.agentId ? `${agentLabel(log.agentId)} · ` : ""}{log.model} · {log.durationMs === null ? "en curso" : `${log.durationMs} ms`}</small><time>{new Date(log.createdAt).toLocaleString("es-ES")}</time></div><b>{log.totalTokens ?? "—"}</b></button>) : <div className="logs-empty"><strong>No hay logs para estos filtros</strong><p>Las nuevas llamadas a ChatGPT aparecerán aquí automáticamente.</p></div>}</div>
+      <div className="logs-detail">{selected ? <><header><div><p className="eyebrow">Detalle de la petición</p><h2>{selected.operation.replaceAll("_", " ")}</h2><small>{selected.id}</small></div><span className={`log-status-badge ${selected.status}`}>{statusLabel(selected.status)}</span></header><div className="logs-detail-tabs" role="tablist" aria-label="Contenido del log"><button role="tab" aria-selected={detailTab === "request"} className={detailTab === "request" ? "active" : ""} onClick={() => setDetailTab("request")}>Petición enviada</button><button role="tab" aria-selected={detailTab === "response"} className={detailTab === "response" ? "active" : ""} onClick={() => setDetailTab("response")}>Respuesta observable</button><button role="tab" aria-selected={detailTab === "metadata"} className={detailTab === "metadata" ? "active" : ""} onClick={() => setDetailTab("metadata")}>Metadatos</button></div>{detailTab === "request" ? <div className="log-json"><div><span>Contenido exacto enviado · nombres de alumnos protegidos con alias</span><button onClick={() => void navigator.clipboard.writeText(prettyJson(selected.requestBody))}>Copiar JSON</button></div><pre>{prettyJson(selected.requestBody)}</pre></div> : detailTab === "response" ? <div className="log-json"><div><span>Salida recibida antes de sustituir alias localmente</span><button onClick={() => void navigator.clipboard.writeText(prettyJson(selected.responseBody))}>Copiar JSON</button></div><pre>{prettyJson(selected.responseBody)}</pre>{selected.errorMessage && <p className="log-error">{selected.errorCode}: {selected.errorMessage}</p>}</div> : <dl className="log-metadata"><div><dt>Agente</dt><dd>{selected.agentId ? agentLabel(selected.agentId) : "Sin agente asociado"}</dd></div><div><dt>Proveedor</dt><dd>{selected.provider}</dd></div><div><dt>Modelo</dt><dd>{selected.model}</dd></div><div><dt>Endpoint</dt><dd>{selected.endpoint}</dd></div><div><dt>ID de petición OpenAI</dt><dd>{selected.requestId ?? "No disponible"}</dd></div><div><dt>ID de respuesta</dt><dd>{selected.responseId ?? "No disponible"}</dd></div><div><dt>Conversación local</dt><dd>{selected.conversationId ?? "Sin conversación asociada"}</dd></div><div><dt>Alias de alumnos</dt><dd>{selected.studentAliasCount}</dd></div><div><dt>Tokens</dt><dd>{selected.inputTokens ?? 0} entrada · {selected.outputTokens ?? 0} salida · {selected.totalTokens ?? 0} total</dd></div><div><dt>Inicio</dt><dd>{new Date(selected.createdAt).toLocaleString("es-ES")}</dd></div><div><dt>Duración</dt><dd>{selected.durationMs === null ? "En curso" : `${selected.durationMs} ms`}</dd></div></dl>}</> : <div className="detail-placeholder">Selecciona una petición.</div>}</div>
+    </section>
+    <p className="logs-privacy-note">Se guarda localmente el cuerpo seudonimizado enviado y la respuesta observable. Nunca se guardan cabeceras de autorización, tokens OAuth, nombres reales sustituidos ni razonamiento interno.</p>
+    {showDelete && <div className="delete-dialog-backdrop" role="presentation"><section className="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-logs-title"><span>!</span><p className="eyebrow">Borrado de auditoría</p><h2 id="delete-logs-title">Borrar todos los logs de ChatGPT</h2><p>Esta operación no se puede deshacer. Escribe exactamente <strong>BORRAR LOGS</strong> para continuar.</p><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="BORRAR LOGS"/><div><button onClick={() => { setShowDelete(false); setConfirmation(""); }}>Cancelar</button><button className="danger" disabled={busy || confirmation !== "BORRAR LOGS"} onClick={() => void clear()}>{busy ? "Borrando…" : "Borrar definitivamente"}</button></div></section></div>}
   </div>;
 }
 

@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { OllamaProvider } from "@/ai/providers/ollama-provider";
-import { loadConfig } from "@/config/env";
+import { getConnectedLlmProvider } from "@/ai/providers/provider-factory";
 import type { ChatPageContext } from "@/domain/chat";
 import { localDateKey, minuteLabel, mondayOfWeek } from "@/domain/planning";
 import { listClassrooms } from "./classroom-service";
@@ -8,6 +7,7 @@ import { getCurriculumOverview, getWeekPlan } from "./planning-service";
 import { getRecentObservations, getStudentProfile, listStudents, resolveStudents, resolveStudentsInConversation } from "./student-service";
 import { getAgentDashboard } from "./agent-admin-service";
 import { getDatabaseOverview } from "./database-admin-service";
+import { createStudentPseudonymizer } from "./student-pseudonymization-service";
 
 export const assistantToolDecisionSchema = z.object({
   tool: z.enum([
@@ -222,22 +222,24 @@ async function selectFilteredStudents(decision: AssistantToolDecision, message: 
   return { students, filtered };
 }
 
-export async function selectAssistantTool(message: string, history: ConversationTurn[], pageContext?: ChatPageContext): Promise<AssistantToolDecision> {
+export async function selectAssistantTool(message: string, history: ConversationTurn[], pageContext?: ChatPageContext, conversationId = "tool-selection"): Promise<AssistantToolDecision> {
   const deterministic = fallbackToolDecision(message, history);
   // Clear, testable intents are resolved deterministically. The LLM is reserved for
   // natural-language requests that do not match a known command pattern.
   if (deterministic.tool !== "general_conversation") return deterministic;
-  const config = loadConfig();
-  const provider = new OllamaProvider({ baseUrl: config.OLLAMA_BASE_URL, model: config.OLLAMA_MODEL, timeoutMs: 30_000 });
+  const provider = await getConnectedLlmProvider({ conversationId, operation: "select_assistant_tool", agentId: "alfred-orchestrator" });
   try {
-    const modelDecision = await provider.generateStructured(
-      `/no_think\nHistorial exclusivo de este chat:\n${transcript(history) || "(sin mensajes anteriores)"}\n\nPantalla visible ahora: ${pageContext ? `${pageContext.label}: ${pageContext.summary}` : "(sin contexto de pantalla)"}.\n\nSolicitud actual: ${message}\n\nHerramientas disponibles:${toolCatalog}\nElige exactamente una herramienta según la intención de la solicitud actual. La pantalla visible aporta contexto, pero nunca convierte por sí sola una petición administrativa en una operación sobre el alumno visible. Para cualquier pregunta sobre datos docentes guardados debes elegir una herramienta de consulta, aunque los datos no aparezcan en el historial. Usa studentQuery solo para el nombre o referencia del alumno; déjalo vacío en los demás casos. En operaciones de escritura, extrae solo datos explícitos del mensaje o del diálogo actual y deja vacíos los campos ausentes.`,
+    if (!provider) return deterministic;
+    const pseudonymizer = await createStudentPseudonymizer(conversationId);
+    const cloudDecision = await provider.generateStructured(
+      pseudonymizer.pseudonymizeText(`Historial exclusivo de este chat:\n${transcript(history) || "(sin mensajes anteriores)"}\n\nPantalla visible ahora: ${pageContext ? `${pageContext.label}: ${pageContext.summary}` : "(sin contexto de pantalla)"}.\n\nSolicitud actual: ${message}\n\nHerramientas disponibles:${toolCatalog}\nElige exactamente una herramienta según la intención de la solicitud actual. La pantalla visible aporta contexto, pero nunca convierte por sí sola una petición administrativa en una operación sobre el alumno visible. Para cualquier pregunta sobre datos docentes guardados debes elegir una herramienta de consulta, aunque los datos no aparezcan en el historial. Usa studentQuery solo para la referencia seudonimizada del alumno; déjalo vacío en los demás casos. En operaciones de escritura, extrae solo datos explícitos del mensaje o del diálogo actual y deja vacíos los campos ausentes.`),
       assistantToolDecisionSchema,
       {
         temperature: 0,
         system: "Eres el orquestador local de Alfred. Clasifica la intención y selecciona una herramienta segura. No respondas la pregunta y no inventes datos. Devuelve únicamente la decisión estructurada solicitada.",
       },
     );
+    const modelDecision = pseudonymizer.depseudonymize(cloudDecision);
     // A model may never turn an ambiguous sentence into a mutation. Those require
     // an explicit deterministic match above and still go through PendingAction.
     if (["create_classroom", "create_student", "control_agent"].includes(modelDecision.tool)) {

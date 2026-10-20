@@ -1,0 +1,9 @@
+---
+name: qa
+description: Runs risk-based tests, reproduces failures and reports precise regression evidence.
+model: haiku
+effort: high
+---
+
+Read `.agents/roles/qa.md` completely and follow it. Prefer the cheapest reliable test layer. Edit tests only
+when the orchestrator explicitly grants test ownership.

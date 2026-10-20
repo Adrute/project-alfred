@@ -12,7 +12,7 @@ En octubre de 2026 Prisma 8 todavía presenta SQLite como experimental, mientras
 soportado. Se fija la rama 7 y se usa el adaptador oficial `better-sqlite3`. El lockfile conserva las
 versiones exactas resueltas. Revisar esta decisión antes de una actualización mayor.
 
-## ADR-003 · `qwen3.5:9b` como perfil funcional
+## ADR-003 · `qwen3.5:9b` como perfil funcional (sustituida)
 
 El Mac detectado dispone de Apple M4 y 16 GB. El perfil inicial `qwen3:4b` era adecuado para validar
 la integración local, pero no ofrece el margen de calidad requerido para convertir Alfred en una
@@ -25,10 +25,13 @@ mediante reglas deterministas, todas las herramientas tienen esquemas Zod, las e
 contra SQLite y las escrituras requieren una `PendingAction`. `npm run ai:eval` forma parte de la
 validación del modelo configurado.
 
-## ADR-004 · HTTP nativo para Ollama
+Esta decisión queda sustituida por ADR-013. El adaptador permanece como referencia de compatibilidad,
+pero el producto no lo selecciona durante la ejecución.
+
+## ADR-004 · HTTP nativo para Ollama (sustituida)
 
 Se usa `fetch` de Node en vez de un SDK adicional. El proveedor acepta únicamente hosts loopback,
-aplica timeout, JSON Schema y validación Zod. No hay fallback cloud.
+aplica timeout, JSON Schema y validación Zod. ADR-013 sustituye su uso como proveedor activo.
 
 ## ADR-005 · Confirmación idempotente
 
@@ -50,7 +53,7 @@ clases por horario de verano y la lógica es idéntica en macOS y Windows.
 
 ## ADR-008 · Progreso basado en confirmaciones
 
-Las propuestas de actividades pueden proceder de Ollama, pero duración, solapamientos, recurrencia y
+Las propuestas de actividades pueden proceder de ChatGPT, pero duración, solapamientos, recurrencia y
 progreso se calculan en servicios deterministas. `LessonExecution` conserva cada confirmación y
 `PlanningChange` registra versiones antes/después sin sobrescribir silenciosamente el historial.
 
@@ -94,6 +97,48 @@ el modelo de datos A2A 1.0. Cada llamada genera un `Message`, una `Task` con est
 guardar prompts ni razonamiento interno. Se evita el SDK oficial porque no se necesitan red, streaming
 ni push para módulos del mismo monolito; los contratos mantienen nombres y semántica de A2A 1.0 y
 están cubiertos por pruebas de regresión.
+
+## ADR-013 · ChatGPT opcional con seudonimización local
+
+Alfred permanece completamente utilizable en modo manual. La profesora puede activar las funciones
+avanzadas mediante **Continue with ChatGPT**, usando el flujo público OIDC con PKCE para aplicaciones
+open source. Las credenciales se guardan en el runtime local, nunca en almacenamiento del navegador.
+Todas las inferencias usan Responses API con `store: false` y `stream: true`.
+
+Antes de salir del proceso, una pasarela sustituye nombres, identificadores de SQLite y datos de
+contacto por alias opacos derivados por conversación. Las observaciones, calificaciones y demás hechos
+pueden acompañar al alias para conservar capacidad de razonamiento. Las llamadas de herramientas se
+traducen de vuelta localmente, se validan con Zod y siguen sujetas a `PendingAction`. Los endpoints de
+OpenAI están fijados en código; no se admite configurar destinos cloud arbitrarios.
+
+## ADR-014 · Auditoría local de llamadas a ChatGPT
+
+Cada invocación a Responses API crea una entrada `CloudAiTrace` antes de realizar la conexión. Se conserva
+el cuerpo JSON ya seudonimizado que se envía realmente, junto con la respuesta observable, modelo, operación,
+identificadores de soporte, tokens, duración y error. La petición no se envía si no puede iniciarse su traza.
+
+La interfaz **Administración → Logs** permite buscar y filtrar estos registros, inspeccionar su JSON y
+borrarlos con confirmación reforzada. No se persisten cabeceras de autorización, tokens OAuth, el mapa local
+entre alias y nombres ni elementos de razonamiento devueltos por el proveedor.
+
+## ADR-015 · Modelo configurable por agente generativo
+
+`AgentRuntime.aiModel` conserva una preferencia opcional para cada agente que declara `usesAi`. La lista
+seleccionable se consulta al catálogo de modelos de la cuenta conectada y una elección se valida contra
+ese catálogo antes de persistirse. Sin preferencia, el agente hereda el modelo efectivo de la sesión.
+
+Solo Alfred, MemoryAgent y TutoringAgent exponen el selector porque son los módulos que realizan
+inferencias generativas. Los demás agentes ejecutan reglas y servicios deterministas; mostrarles una
+preferencia que nunca utilizan sería engañoso. Cada `CloudAiTrace` conserva además el `agentId` y el modelo
+efectivo para que la configuración sea auditable.
+
+## ADR-016 · Markdown seguro como formato de presentación
+
+Las respuestas generativas admiten un subconjunto explícito de Markdown: encabezados, énfasis, código,
+enlaces HTTP(S), citas, listas y tablas. Un renderizador propio crea nodos React y no interpreta HTML
+crudo ni usa `dangerouslySetInnerHTML`. El historial lateral elimina las marcas y presenta un resumen
+en texto plano. De esta forma el formato solicitado al modelo se visualiza correctamente sin convertir
+su salida en una superficie de inyección.
 
 ## Licencias directas
 

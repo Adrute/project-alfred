@@ -46,6 +46,20 @@ prompts completos, razonamiento interno ni datos personales en logs técnicos.
 - No añadas dependencias o frameworks de agentes sin una decisión documentada.
 - Actualiza `.env.example`, README y documentación cuando cambie configuración o arquitectura.
 
+## Ramas, contexto y registro de cambios
+
+- Antes de editar, ejecuta `npm run branch:check`. Nunca desarrolles directamente sobre `main` o `master`.
+- Usa ramas `feature/`, `fix/`, `docs/`, `chore/`, `refactor/`, `test/` o `release/` con nombre descriptivo.
+- No hagas merge, rebase ni push a `main`/`master` sin una confirmación explícita del propietario para esa
+  integración concreta. Preparar una rama o una pull request no concede esa autorización.
+- Consulta primero `docs/features/manifest.json` y lee solo las fichas relevantes de `docs/features/`, sus
+  puntos de entrada y las reglas globales. No recorras todo el proyecto salvo que el mapa sea insuficiente
+  y el motivo quede documentado.
+- Mantén `CHANGELOG.md`: todo cambio terminado y relevante se añade bajo `Unreleased` en Added, Changed,
+  Fixed, Security, Deprecated o Removed. No uses el changelog como volcado de commits.
+- Actualiza la ficha funcional cuando cambien su comportamiento, contratos, invariantes, puntos de entrada
+  o pruebas. Crea una ficha nueva para una capacidad nueva que no tenga propietario claro.
+
 ## Persistencia
 
 Modifica `prisma/schema.prisma`, crea una migración con nombre descriptivo, revisa el SQL generado y
@@ -59,8 +73,10 @@ cambios de persistencia ejecuta también las migraciones y el seed sobre una bas
 determinista debe tener pruebas unitarias; los casos de uso, integración; los recorridos críticos,
 Playwright. Añade regresiones para cada fallo corregido.
 
-No marques una función como terminada si depende de Ollama y no fue probada con el modelo configurado.
+No marques una función como terminada si depende de IA generativa y no fue probada con el proveedor y
+modelo configurados.
 La compatibilidad Windows solo puede marcarse validada después de ejecutarla realmente en Windows.
+Una entrega tampoco está terminada sin `CHANGELOG.md` y las fichas de `docs/features/` afectadas al día.
 
 ## Añadir un agente
 
@@ -69,7 +85,8 @@ La compatibilidad Windows solo puede marcarse validada después de ejecutarla re
 3. Implementa sus casos de uso en servicios y respeta la propiedad de datos.
 4. Añade trazabilidad con `AgentExecution`, sin razonamientos internos.
 5. Prueba descubrimiento, validación, errores y confirmaciones.
-6. Documenta responsabilidades y flujo. No crees microservicios en esta POC.
+6. Documenta responsabilidades y flujo. No conviertas agentes internos en microservicios sin una decisión
+   arquitectónica explícita y una necesidad operativa demostrada.
 
 ## Catálogo de agentes
 
@@ -83,6 +100,27 @@ La compatibilidad Windows solo puede marcarse validada después de ejecutarla re
 
 PlanningAgent y CurriculumAgent comparten información exclusivamente mediante servicios de dominio;
 no acceden directamente a tablas propiedad del otro agente.
+
+## Equipo de agentes de desarrollo
+
+Los agentes de `.agents/` construyen y revisan el proyecto; no deben confundirse con los agentes docentes
+de `src/agents`. `.agents/manifest.json`, `.agents/orchestration.md` y `.agents/roles/` son la fuente de
+verdad neutral. `.codex/agents/` y `.claude/agents/` son adaptadores y no duplican las reglas de negocio.
+
+Para un requisito no trivial, el agente principal actúa como `orchestrator`, clasifica riesgo y selecciona
+la ruta mínima. Lee completamente el contrato de cada rol antes de delegarle trabajo. Puede usar architect,
+backend, frontend, data, qa, security, documentation y reviewer según la matriz de orquestación.
+
+- Máximo tres especialistas concurrentes y un único escritor sobre el árbol compartido.
+- Paraleliza preferentemente exploración, QA y revisiones de solo lectura.
+- Usa los perfiles neutrales `economy`, `balanced` y `deep`; cada adaptador los traduce a modelos de su proveedor.
+- Escala el perfil solo por ambigüedad, riesgo alto, contradicción o intentos fallidos comprobados.
+- Los handoffs contienen objetivo, alcance, evidencia, restricciones, resultado esperado y validación; no todo el historial.
+- Security es obligatorio para autenticación, privacidad, permisos, borrados, IA cloud y datos sensibles.
+- Reviewer es obligatorio para cambios transversales o de riesgo medio/alto.
+- Ejecuta `npm run agents:validate` cuando cambie cualquier definición o adaptador.
+- El orquestador verifica rama, carga el contexto desde `docs/features/manifest.json` y reserva el merge a
+  una confirmación explícita del propietario.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

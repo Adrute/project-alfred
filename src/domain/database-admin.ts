@@ -27,6 +27,7 @@ export const databaseTableKeySchema = z.enum([
   "agentMessages",
   "agentRuntimes",
   "agentExecutions",
+  "cloudAiTraces",
   "seatingLayouts",
   "seatingAssignments",
   "pendingActions",

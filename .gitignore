@@ -3,6 +3,7 @@ node_modules/
 
 # Next.js
 .next/
+.next-e2e/
 out/
 
 # Local configuration and data
@@ -11,6 +12,8 @@ out/
 .env.*.local
 data/*.db
 data/*.db-*
+data/auth/
+data/e2e-runtime/
 prisma/*.db
 prisma/*.db-*
 

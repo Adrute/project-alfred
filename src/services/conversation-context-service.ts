@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { OllamaProvider } from "@/ai/providers/ollama-provider";
-import { loadConfig } from "@/config/env";
+import { getConnectedLlmProvider } from "@/ai/providers/provider-factory";
 import type { ChatPageContext } from "@/domain/chat";
 import { getStudentsByIds, resolveStudents, resolveStudentsInConversation } from "./student-service";
+import { createStudentPseudonymizer } from "./student-pseudonymization-service";
 
 export type ConversationTurn = { role: string; content: string };
 
@@ -116,6 +116,7 @@ function canUseSingleStudentFocus(message: string, topic: ConversationTopic) {
 }
 
 export async function resolveConversationContext(input: {
+  conversationId?: string;
   message: string;
   history: ConversationTurn[];
   previousState: ConversationContextState;
@@ -150,21 +151,26 @@ export async function resolveConversationContext(input: {
     } else if (candidates.length === 1) {
       students = candidates;
       source = visibleStudents.some((student) => student.id === candidates[0].id) ? "page" : "history";
+    } else if (input.previousState.activeStudentIds.length === 1) {
+      students = candidates.filter((student) => student.id === input.previousState.activeStudentIds[0]);
+      if (students.length) source = "history";
     }
   }
 
   if (!students.length && (input.history.length || candidates.length)) {
-    const config = loadConfig();
-    const provider = new OllamaProvider({ baseUrl: config.OLLAMA_BASE_URL, model: config.OLLAMA_MODEL, timeoutMs: 30_000 });
+    const provider = await getConnectedLlmProvider({ conversationId: input.conversationId, operation: "resolve_conversation_context", agentId: "memory-agent" });
     try {
-      const resolution = await provider.generateStructured(
-        `/no_think\nHistorial exclusivo del chat actual:\n${historyTranscript(input.history) || "(sin historial)"}\n\nPantalla visible ahora: ${input.pageContext ? `${input.pageContext.label}: ${input.pageContext.summary}` : "(sin contexto de pantalla)"}.\nFoco guardado: ${input.previousState.topic}.\nAlumnos permitidos porque aparecen en este chat o en la pantalla visible: ${candidates.map((student) => `${student.firstName} ${student.lastName}`).join(", ") || "(ninguno)"}.\n\nMensaje actual: ${input.message}\n\nDetermina si el mensaje depende del historial o de la pantalla visible para completar una referencia, un sujeto omitido o el tema. Si depende, selecciona únicamente nombres exactos de la lista permitida. No inventes alumnos ni hechos. Si contiene un nombre nuevo que no está en la lista, no lo sustituyas por otro alumno. El tema debe describir la intención actual, heredándolo solo cuando sea una continuación real.`,
+      if (!provider) throw new Error("ChatGPT no está conectado.");
+      const pseudonymizer = await createStudentPseudonymizer(input.conversationId ?? "conversation-context");
+      const resolutionFromCloud = await provider.generateStructured(
+        pseudonymizer.pseudonymizeText(`Historial exclusivo del chat actual:\n${historyTranscript(input.history) || "(sin historial)"}\n\nPantalla visible ahora: ${input.pageContext ? `${input.pageContext.label}: ${input.pageContext.summary}` : "(sin contexto de pantalla)"}.\nFoco guardado: ${input.previousState.topic}.\nAlumnos permitidos porque aparecen en este chat o en la pantalla visible: ${candidates.map((student) => `${student.firstName} ${student.lastName}`).join(", ") || "(ninguno)"}.\n\nMensaje actual: ${input.message}\n\nDetermina si el mensaje depende del historial o de la pantalla visible para completar una referencia, un sujeto omitido o el tema. Si depende, selecciona únicamente referencias exactas de la lista permitida. No inventes alumnos ni hechos. Si contiene una referencia nueva que no está en la lista, no la sustituyas por otra. El tema debe describir la intención actual, heredándolo solo cuando sea una continuación real.`),
         contextResolutionSchema,
         {
           temperature: 0,
           system: "Resuelves contexto conversacional para Alfred. No respondes al usuario ni ejecutas acciones. Produces solo una referencia estructurada, prudente y basada en el chat actual.",
         },
       );
+      const resolution = pseudonymizer.depseudonymize(resolutionFromCloud);
       const hasSingleActiveStudent = input.previousState.activeStudentIds.length === 1;
       const inheritsSingleFocus = hasSingleActiveStudent && canUseSingleStudentFocus(input.message, explicitTopic);
       if ((resolution.dependsOnHistory && (resolution.confidence === "high" || hasSingleActiveStudent)) || inheritsSingleFocus) {

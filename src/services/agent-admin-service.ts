@@ -67,6 +67,10 @@ export async function getAgentDashboard() {
       id: definition.id,
       name: definition.name,
       description: definition.description,
+      ai: {
+        usesAi: Boolean(definition.usesAi),
+        configuredModel: runtimeById.get(definition.id)?.aiModel ?? null,
+      },
       capabilities: definition.capabilities.map((capability) => ({
         id: capability.id,
         description: capability.description,

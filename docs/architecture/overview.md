@@ -18,8 +18,10 @@ flowchart LR
   REG --> ME[MemoryAgent]
   REG --> PL[PlanningAgent]
   REG --> CU[CurriculumAgent]
-  OR --> LLM[LLMProvider]
-  LLM --> OL[Ollama en 127.0.0.1]
+  OR --> PG[Pasarela local de seudonimización]
+  PG --> LLM[LLMProvider]
+  LLM --> GPT[Responses API con OAuth de ChatGPT]
+  GPT --> PG
   ST --> SV[Servicios de dominio]
   TU --> SV
   CL --> SOLVER[Solver determinista]
@@ -45,7 +47,8 @@ un resumen acotado y los identificadores de alumnos que están realmente visible
 de página al conversar y la misma conversación puede abrirse después en la vista de chat completa.
 
 Alfred conserva un foco conversacional estructurado con tema, alumnos activos y el último resultado de
-herramienta. Ollama recibe este estado y el historial del chat actual, elige herramientas nativas y
+herramienta. Con una cuenta autorizada, ChatGPT recibe este estado y el historial del chat actual ya
+seudonimizados, elige herramientas tipadas y
 puede encadenar sus resultados. Los servicios resuelven nombres e identificadores contra SQLite antes
 de consultar o proponer cambios. El foco se persiste en `Conversation.contextJson`, sobrevive a la
 reapertura del chat y nunca se obtiene de otra conversación.
@@ -63,6 +66,11 @@ número de reinicios. El orquestador comprueba su estado antes de atender un men
 especializada comprueba el agente elegido antes de ejecutar su caso de uso. El panel combina este
 estado con `AgentExecution` para mostrar usos, errores, tasa de éxito, duración media, operaciones y
 actividad reciente.
+
+Los agentes que realizan inferencias declaran `usesAi`. Para ellos, `AgentRuntime.aiModel` puede fijar
+uno de los modelos disponibles para la cuenta conectada; si queda vacío, heredan el modelo de la sesión.
+La preferencia se resuelve en la factoría de proveedores antes de cada petición y no altera capacidades,
+permisos ni confirmaciones. Los agentes deterministas no ofrecen este selector.
 
 Como Alfred es un monolito local, iniciar, detener y reiniciar son controles lógicos persistentes de
 los módulos; no crean ni destruyen procesos del sistema operativo. Este límite mantiene el producto
@@ -87,14 +95,17 @@ sequenceDiagram
   actor Teacher as Profesora
   participant UI
   participant Alfred
-  participant LLM as OllamaProvider
+  participant Privacy as Pasarela local
+  participant LLM as ChatGPT / Responses API
   participant Service as Servicio de dominio
   participant DB as SQLite
 
   Teacher->>UI: "Lucas participa mucho"
   UI->>Alfred: mensaje + contexto
-  Alfred->>LLM: historial + estado + herramientas nativas
-  LLM-->>Alfred: llamada de herramienta tipada
+  Alfred->>Privacy: historial + estado + nombres reales
+  Privacy->>LLM: alias + contexto + herramientas
+  LLM-->>Privacy: llamada con alias
+  Privacy-->>Alfred: llamada de herramienta tipada
   Alfred->>Service: validar entidades y reglas
   Service->>DB: guardar PendingAction idempotente
   Alfred-->>UI: mostrar cambio exacto
@@ -104,22 +115,47 @@ sequenceDiagram
   Service-->>UI: resultado trazable
 ```
 
-Las lecturas y funciones deterministas siguen disponibles si Ollama está detenido. Nunca se cambia a
-un proveedor remoto.
+Las lecturas y funciones deterministas siguen disponibles sin iniciar sesión. ChatGPT solo se utiliza
+después de una autorización OAuth explícita y nunca recibe acceso directo a SQLite.
 
 ## Orquestación de consultas abiertas
 
-Ollama recibe el historial del chat activo, el estado estructurado y un catálogo declarativo de
+ChatGPT recibe el historial seudonimizado del chat activo, el estado estructurado y un catálogo declarativo de
 herramientas de lectura y propuesta. Devuelve llamadas nativas cuyos argumentos se validan con Zod,
 nunca SQL ni una llamada libre. El orquestador comprueba que el agente correspondiente esté activo,
-ejecuta la herramienta mediante su servicio de dominio y devuelve el resultado al modelo para que
-redacte la respuesta. Así, filtros, entidades y resultados se mantienen entre turnos sin enumerar cada
+traduce los alias, ejecuta la herramienta mediante su servicio de dominio y devuelve el resultado
+seudonimizado al modelo para que redacte la respuesta. La respuesta recupera los nombres localmente.
+Así, filtros, entidades y resultados se mantienen entre turnos sin enumerar cada
 posible formulación.
 
-Las reglas deterministas actúan como degradación local cuando Ollama no está disponible. Las
+Las reglas deterministas actúan como modo manual cuando ChatGPT no está conectado o no está disponible. Las
 mutaciones siguen creando una `PendingAction` y requieren confirmación explícita: la selección del
 modelo no amplía permisos. Si el modelo afirma haber ejecutado trabajo sin llamada real, Alfred fuerza
 una autocorrección antes de mostrar la respuesta.
+
+Los alias de alumno se calculan con HMAC a partir de un secreto local y el identificador de la
+conversación. No son claves de SQLite, permanecen estables dentro del chat y cambian entre chats. La
+pasarela reemplaza también nombres que aparecen dentro de observaciones, resultados de herramientas y
+contexto de pantalla, además de correos y teléfonos. Las credenciales OAuth se guardan en un archivo
+local excluido de Git y nunca se entregan al navegador.
+
+## Logs de ChatGPT
+
+El proveedor registra una `CloudAiTrace` antes de cada llamada externa. La traza contiene exactamente el
+cuerpo JSON seudonimizado que se envía a Responses API y, al finalizar, una representación de la respuesta
+observable sin elementos de razonamiento. También conserva `x-request-id`, identificador de respuesta,
+modelo, operación, uso de tokens y duración. La pestaña **Administración → Logs** ofrece búsqueda de texto,
+filtros, histograma, detalle JSON y borrado explícito. Las credenciales solo se incorporan a la cabecera de
+red y nunca forman parte de la traza.
+
+`CloudAiTrace.agentId` relaciona cada petición con el agente que la originó. Esto permite comprobar desde
+el panel qué agente usó qué modelo, incluso cuando varios agentes generativos tienen preferencias distintas.
+
+## Presentación de respuestas
+
+La salida visible de Alfred acepta un subconjunto controlado de Markdown y se transforma directamente en
+nodos React. No se inyecta HTML del modelo. El mismo renderizador se utiliza en el chat completo y en el
+asistente flotante; para la vista previa de conversaciones se eliminan las marcas y se conserva solo texto.
 
 ## Propiedad de datos
 

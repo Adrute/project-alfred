@@ -6,11 +6,13 @@ import { chromium, type Page } from "playwright";
 const root = process.cwd();
 const previewDirectory = path.resolve(root, "preview");
 const databasePath = path.resolve(root, "data", "alfred-preview.db");
+const runtimeDirectory = path.resolve(root, "data", "preview-runtime");
 const port = "3200";
 const baseUrl = `http://127.0.0.1:${port}`;
 const previewEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
-  DATABASE_URL: `file:${databasePath}`,
+  DATABASE_URL: "file:./data/alfred-preview.db",
+  DATA_DIRECTORY: runtimeDirectory,
   NODE_ENV: "production",
   PORT: port,
 };
@@ -56,6 +58,7 @@ async function capture(page: Page, filename: string) {
 rmSync(databasePath, { force: true });
 rmSync(`${databasePath}-shm`, { force: true });
 rmSync(`${databasePath}-wal`, { force: true });
+rmSync(runtimeDirectory, { recursive: true, force: true });
 mkdirSync(previewDirectory, { recursive: true });
 
 for (const script of ["scripts/deploy-database.ts", "prisma/seed.ts", "scripts/prepare-demo.ts", "scripts/prepare-preview.ts"]) {
@@ -120,13 +123,18 @@ try {
   await page.locator(".a2a-admin").waitFor();
   await capture(page, "11-administracion-a2a.png");
 
+  await page.getByRole("tab", { name: "Logs" }).click();
+  await page.locator(".logs-admin").waitFor();
+  await capture(page, "12-administracion-logs.png");
+
   await page.getByRole("tab", { name: "Base de datos" }).click();
   await page.locator(".database-admin").waitFor();
-  await capture(page, "12-administracion-base-datos.png");
+  await capture(page, "13-administracion-base-datos.png");
 } finally {
   await browser?.close();
   await stopServer(server);
   rmSync(databasePath, { force: true });
   rmSync(`${databasePath}-shm`, { force: true });
   rmSync(`${databasePath}-wal`, { force: true });
+  rmSync(runtimeDirectory, { recursive: true, force: true });
 }
