@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { agentDefinitions } from "@/agents/definitions";
+import { summarizeAgentTokenUsage } from "@/domain/agent-usage";
 import { database } from "@/lib/database";
 
 export const agentControlSchema = z.object({
@@ -46,9 +47,12 @@ export async function controlAgent(agentId: string, action: AgentControlAction) 
 
 export async function getAgentDashboard() {
   await ensureAgentRuntimes();
-  const [runtimes, executions] = await Promise.all([
+  const [runtimes, executions, cloudTraces] = await Promise.all([
     database.agentRuntime.findMany(),
     database.agentExecution.findMany({ orderBy: { startedAt: "desc" } }),
+    database.cloudAiTrace.findMany({
+      select: { agentId: true, inputTokens: true, outputTokens: true, totalTokens: true },
+    }),
   ]);
   const runtimeById = new Map(runtimes.map((item) => [item.agentId, item]));
   const today = new Date();
@@ -59,6 +63,7 @@ export async function getAgentDashboard() {
     const completed = own.filter((item) => item.status === "completed");
     const failed = own.filter((item) => item.status === "failed");
     const durations = own.flatMap((item) => item.finishedAt ? [item.finishedAt.getTime() - item.startedAt.getTime()] : []);
+    const tokenUsage = summarizeAgentTokenUsage(cloudTraces.filter((item) => item.agentId === definition.id));
     const operations = Object.entries(own.reduce<Record<string, number>>((result, item) => {
       result[item.operation] = (result[item.operation] ?? 0) + 1;
       return result;
@@ -70,6 +75,7 @@ export async function getAgentDashboard() {
       ai: {
         usesAi: Boolean(definition.usesAi),
         configuredModel: runtimeById.get(definition.id)?.aiModel ?? null,
+        tokenUsage,
       },
       capabilities: definition.capabilities.map((capability) => ({
         id: capability.id,

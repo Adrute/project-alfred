@@ -3,7 +3,7 @@
 ## Alcance
 
 Catálogo de los siete agentes funcionales, estado operativo, arranque, parada, reinicio, estadísticas,
-modelos generativos e historial de mensajes A2A internos y externos.
+modelos generativos, consumo de tokens e historial de mensajes A2A internos y externos.
 
 ## Flujo actual
 
@@ -16,6 +16,7 @@ tipadas entre módulos. `a2a-service.ts` expone la frontera A2A 1.0 local sin co
 - `src/agents/definitions.ts` y `registry.ts` son el catálogo funcional.
 - `AgentExecution` contiene métricas, no razonamiento interno.
 - `AgentConversation` y `AgentMessage` conservan solicitudes y respuestas estructuradas observables.
+- Las métricas de tokens se agregan desde `CloudAiTrace`; nunca leen el contenido de la petición.
 - Todas las interfaces permanecen en loopback y A2A no evita la confirmación humana.
 - No confundir estos agentes con el equipo de desarrollo de `.agents/`.
 
@@ -32,5 +33,6 @@ tipadas entre módulos. `a2a-service.ts` expone la frontera A2A 1.0 local sin co
 ## Checklist de cambio
 
 - Probar agente disponible, detenido y reiniciado, más estadísticas tras ejecución.
+- Contrastar total, entrada, salida y media por petición con trazas de uso conocidas.
 - Validar mensajes A2A con Zod y no persistir prompts de sistema ni razonamiento.
 - Cargar `cloud-ai-privacy-logs.md` al cambiar modelos o agentes generativos.

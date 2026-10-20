@@ -6,6 +6,7 @@ entrada indicados y las reglas globales de `AGENTS.md`.
 
 | Funcionalidad | Cuándo cargarla |
 |---|---|
+| [Navegación y estructura](application-shell.md) | Menú lateral, layout global y comportamiento responsive |
 | [Alfred y conversaciones](assistant-chat.md) | Chat, memoria conversacional, burbuja contextual, formato de respuesta |
 | [Alumnado y grupos](students-classrooms.md) | Altas, perfiles generales, observaciones, matrículas y clases/grupos |
 | [Asignaturas y seguimiento académico](teaching.md) | Docencia, ficha por asignatura y calificaciones |
@@ -15,6 +16,7 @@ entrada indicados y las reglas globales de `AGENTS.md`.
 | [Agentes, estado y A2A](administration-agents-a2a.md) | Control de agentes, estadísticas e intercambios A2A |
 | [ChatGPT, privacidad y logs](cloud-ai-privacy-logs.md) | OAuth, modelos, seudonimización y auditoría cloud |
 | [Administración de datos](database-administration.md) | Explorador SQLite, borrado, Prisma y migraciones |
+| [Exportación de datos](data-export.md) | Descargas CSV/Excel, conjuntos exportables y seguridad de hojas |
 
 ## Regla de carga
 

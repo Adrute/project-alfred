@@ -59,6 +59,37 @@ async function seed(): Promise<void> {
       create: { id, studentId, content, category, source: "demo_seed", observedAt, confirmationStatus: "confirmed" },
     });
   }
+  const nextTutoring = await database.tutoringSession.upsert({
+    where: { id: "tutoring_demo_lucas_next" },
+    update: { status: "draft", scheduledAt: new Date("2026-10-28T16:30:00.000Z") },
+    create: {
+      id: "tutoring_demo_lucas_next",
+      studentId: "student_demo_01",
+      status: "draft",
+      scheduledAt: new Date("2026-10-28T16:30:00.000Z"),
+    },
+  });
+  await database.teacherFeedback.upsert({
+    where: { id: "teacher_feedback_demo_lucas" },
+    update: {
+      tutoringSessionId: nextTutoring.id,
+      originalComment: "Se implica mucho en los orales, aunque a veces responde antes de dejar terminar a sus compañeros.",
+      familyVersion: "En las actividades orales participa con mucho interés. Estamos trabajando para que espere a que sus compañeros terminen antes de intervenir.",
+      familyVersionStatus: "confirmed",
+    },
+    create: {
+      id: "teacher_feedback_demo_lucas",
+      studentId: "student_demo_01",
+      tutoringSessionId: nextTutoring.id,
+      teacherName: "Profesora de Lengua",
+      subject: "Lengua castellana",
+      originalComment: "Se implica mucho en los orales, aunque a veces responde antes de dejar terminar a sus compañeros.",
+      familyVersion: "En las actividades orales participa con mucho interés. Estamos trabajando para que espere a que sus compañeros terminen antes de intervenir.",
+      familyVersionSource: "Ejemplo ficticio confirmado por la profesora",
+      familyVersionStatus: "confirmed",
+      receivedAt: new Date("2026-10-19T10:00:00.000Z"),
+    },
+  });
   await database.studentRelationship.upsert({
     where: { id: "relationship_demo_lucas_marcos" }, update: {},
     create: {
@@ -148,7 +179,8 @@ async function seed(): Promise<void> {
   ] as const;
   for (const [id, teachingAssignmentId, dayOfWeek, startMinute, endMinute, room] of slots) {
     await database.timetableSlot.upsert({
-      where: { id }, update: { active: true, teachingAssignmentId, dayOfWeek, startMinute, endMinute, room },
+      where: { weeklyTimetableId_dayOfWeek_startMinute: { weeklyTimetableId: timetable.id, dayOfWeek, startMinute } },
+      update: { active: true, teachingAssignmentId, endMinute, room },
       create: { id, weeklyTimetableId: timetable.id, teachingAssignmentId, dayOfWeek, startMinute, endMinute, room, activityType: "class" },
     });
   }

@@ -320,11 +320,15 @@ export async function executeAssistantTool(decision: AssistantToolDecision, mess
       ...profile.relationshipsAsB.map((item) => `- ${item.studentA.firstName} ${item.studentA.lastName}: ${item.description}`),
     ];
     const academic = profile.subjectRecords.map((record) => `- ${record.teachingAssignment.subject.name} · ${record.teachingAssignment.classroom.name}: ${record.progressStatus}; ${record.grades.length ? record.grades.map((grade) => `${grade.title} ${grade.score}/${grade.maxScore}`).join(", ") : "sin calificaciones"}`);
+    const teacherFeedback = profile.teacherFeedbacks
+      .filter((item) => item.familyVersionStatus === "confirmed" && item.familyVersion)
+      .map((item) => `- ${item.subject ?? "Comentario general"}: ${item.familyVersion}`);
     return [
       `${profile.firstName} ${profile.lastName} pertenece a ${profile.enrollments[0]?.classroom.name ?? "un grupo no especificado"}.`,
       "", "Observaciones confirmadas:", observationsText(profile.observations),
       "", "Relaciones contextuales activas:", relationships.length ? relationships.join("\n") : "- Ninguna registrada.",
       "", "Seguimiento académico por asignatura:", academic.length ? academic.join("\n") : "- Sin registros académicos.",
+      "", "Comentarios del profesorado preparados para tutoría:", teacherFeedback.length ? teacherFeedback.join("\n") : "- Ninguno confirmado.",
     ].join("\n");
   }
 

@@ -13,6 +13,13 @@ test("complete teacher demonstration", async ({ page }) => {
   await expect(page.getByText("Clases de hoy", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pendientes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Abrir Alfred" })).toBeVisible();
+  await page.getByRole("button", { name: "Colapsar menú lateral" }).click();
+  await expect(page.locator(".app-shell")).toHaveClass(/sidebar-is-collapsed/);
+  expect(await page.evaluate(() => window.localStorage.getItem("alfred.sidebar.collapsed"))).toBe("true");
+  await page.reload();
+  await expect(page.locator(".app-shell")).toHaveClass(/sidebar-is-collapsed/);
+  await page.getByRole("button", { name: "Expandir menú lateral" }).click();
+  await expect(page.locator(".app-shell")).not.toHaveClass(/sidebar-is-collapsed/);
 
   await page.getByRole("button", { name: /Mis asignaturas/ }).click();
   await expect(page.locator(".assignment-strip > button")).toHaveCount(3);
@@ -36,6 +43,17 @@ test("complete teacher demonstration", async ({ page }) => {
   await expect(page.locator(".tutor-hero")).toContainText("2.º ESO C");
   await expect(page.locator(".tutor-roster > button")).toHaveCount(25);
   await expect(page.getByRole("heading", { name: "Lucas Serrano" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Comentarios del profesorado" })).toBeVisible();
+  await expect(page.locator(".teacher-feedback-list")).toContainText("Lengua castellana");
+  await page.getByLabel("Profesor o profesora (opcional)").fill("Profesor de Ciencias");
+  await page.getByLabel("Asignatura o contexto (opcional)").fill("Ciencias");
+  await page.getByLabel("Comentario original").fill("Comprende los conceptos, pero debe explicar con más calma cómo llega a cada conclusión.");
+  await page.getByRole("button", { name: "Guardar y preparar para la familia" }).click();
+  const scienceFeedback = page.locator(".teacher-feedback-list article", { hasText: "Ciencias" }).first();
+  await expect(scienceFeedback).toContainText("Pendiente de revisión");
+  await scienceFeedback.getByRole("button", { name: "Confirmar y guardar para la próxima tutoría" }).click();
+  await expect(scienceFeedback).toContainText("Guardado para tutoría");
+  await expect(page.locator(".meeting-feedback-brief")).toContainText("Ciencias");
 
   await page.getByRole("button", { name: /Grupos/ }).click();
   await page.locator(".class-card", { hasText: "2.º ESO C" }).click();
@@ -171,6 +189,9 @@ test("complete teacher demonstration", async ({ page }) => {
   await expect(page.locator(".agent-list > button")).toHaveCount(7);
   await expect(page.getByLabel("Modelo de IA de Alfred")).toBeVisible();
   await expect(page.getByLabel("Modelo de IA de Alfred")).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "Tokens por agente con IA" })).toBeVisible();
+  await expect(page.getByText("Tokens totales", { exact: true })).toBeVisible();
+  await expect(page.getByText("Media por petición", { exact: true })).toBeVisible();
   await page.locator(".agent-list > button", { hasText: "CurriculumAgent" }).click();
   await expect(page.getByLabel("Modelo de IA de CurriculumAgent")).toHaveCount(0);
   await page.getByRole("button", { name: /Detener/ }).click();
@@ -188,9 +209,16 @@ test("complete teacher demonstration", async ({ page }) => {
   await expect(page.locator(".a2a-thread-list > button").first()).toBeVisible();
   await expect(page.locator(".a2a-message").first()).toContainText("Alfred");
 
+  await page.getByRole("tab", { name: "Exportación" }).click();
+  await expect(page.getByRole("heading", { name: "Exportar datos" })).toBeVisible();
+  await expect(page.getByText("Alumnado", { exact: true })).toBeVisible();
+  const exportDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Descargar Excel" }).click();
+  expect((await exportDownload).suggestedFilename()).toMatch(/^alfred-students-\d{4}-\d{2}-\d{2}\.xlsx$/);
+
   await page.getByRole("tab", { name: "Base de datos" }).click();
   await expect(page.getByRole("heading", { name: "Tablas" })).toBeVisible();
-  await expect(page.locator(".database-table-list > button")).toHaveCount(30);
+  await expect(page.locator(".database-table-list > button")).toHaveCount(31);
   await expect(page.getByRole("heading", { name: "Alumnos" })).toBeVisible();
   const conversationDeletion = page.locator(".deletion-grid article", { hasText: "Conversaciones y acciones pendientes" });
   await conversationDeletion.getByRole("button", { name: "Borrar área" }).click();

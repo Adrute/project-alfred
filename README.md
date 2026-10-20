@@ -26,11 +26,15 @@ asignaturas, unidades, contenidos, sesiones idempotentes, creación de horarios 
 natural y un organizador semanal editable. **Mis asignaturas** separa cada combinación de asignatura y
 grupo e incorpora una ficha académica por alumno con calificaciones ponderadas, progreso, participación,
 tareas, notas y apoyos. **Mi tutoría** es un espacio independiente para el grupo tutor, el seguimiento
-general, las reuniones familiares y sus acuerdos. El panel
+general, las reuniones familiares y sus acuerdos. Ese espacio incluye además comentarios recibidos del
+profesorado: Alfred conserva el texto original, propone una versión editable para comunicar a la familia
+y, tras confirmación docente, la guarda en la próxima tutoría. El panel
 de Administración muestra los siete agentes, su estado, capacidades, actividad y estadísticas;
 permite controlarlos, elegir el modelo de ChatGPT de cada agente generativo, revisar sus intercambios A2A 1.0 y auditar en **Logs** el contenido seudonimizado
 enviado a ChatGPT, la respuesta observable, el modelo, tokens, duración y errores. También permite explorar
-SQLite y borrar registros o áreas con confirmación reforzada. El
+SQLite, borrar registros o áreas con confirmación reforzada y exportar conjuntos seleccionados a CSV o a
+un libro Excel con varias hojas. Las tarjetas de agentes generativos muestran consumo total y medio, junto
+con una comparación visual. El menú lateral puede colapsarse y conserva la preferencia local. El
 recorrido crítico está automatizado con Playwright. Alfred expone además un adaptador local A2A 1.0
 para descubrimiento e interoperabilidad, sin convertir los agentes internos en microservicios.
 

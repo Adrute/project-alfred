@@ -7,6 +7,7 @@ export const databaseTableCatalog: Array<{ key: DatabaseTableKey; label: string;
   { key: "students", label: "Alumnos", group: "Alumnado" },
   { key: "studentEnrollments", label: "Matrículas", group: "Alumnado" },
   { key: "studentObservations", label: "Observaciones", group: "Alumnado" },
+  { key: "teacherFeedbacks", label: "Comentarios del profesorado", group: "Alumnado" },
   { key: "studentRelationships", label: "Relaciones", group: "Alumnado" },
   { key: "studentSubjectRecords", label: "Fichas por asignatura", group: "Alumnado" },
   { key: "assessmentGrades", label: "Calificaciones", group: "Alumnado" },
@@ -53,6 +54,7 @@ async function countTable(key: DatabaseTableKey) {
     case "students": return database.student.count();
     case "studentEnrollments": return database.studentEnrollment.count();
     case "studentObservations": return database.studentObservation.count();
+    case "teacherFeedbacks": return database.teacherFeedback.count();
     case "studentRelationships": return database.studentRelationship.count();
     case "studentSubjectRecords": return database.studentSubjectRecord.count();
     case "assessmentGrades": return database.assessmentGrade.count();
@@ -93,6 +95,7 @@ export async function getDatabaseRecords(key: DatabaseTableKey, take = 50): Prom
     case "students": return database.student.findMany({ orderBy: order, take });
     case "studentEnrollments": return database.studentEnrollment.findMany({ orderBy: { startDate: "desc" }, take });
     case "studentObservations": return database.studentObservation.findMany({ orderBy: order, take });
+    case "teacherFeedbacks": return database.teacherFeedback.findMany({ orderBy: { receivedAt: "desc" }, take });
     case "studentRelationships": return database.studentRelationship.findMany({ orderBy: order, take });
     case "studentSubjectRecords": return database.studentSubjectRecord.findMany({ orderBy: order, take });
     case "assessmentGrades": return database.assessmentGrade.findMany({ orderBy: order, take });
@@ -128,6 +131,7 @@ export async function deleteDatabaseRecord(key: DatabaseTableKey, id: string) {
     case "students": return database.student.delete({ where: { id } });
     case "studentEnrollments": return database.studentEnrollment.delete({ where: { id } });
     case "studentObservations": return database.studentObservation.delete({ where: { id } });
+    case "teacherFeedbacks": return database.teacherFeedback.delete({ where: { id } });
     case "studentRelationships": return database.studentRelationship.delete({ where: { id } });
     case "studentSubjectRecords": return database.studentSubjectRecord.delete({ where: { id } });
     case "assessmentGrades": return database.assessmentGrade.delete({ where: { id } });

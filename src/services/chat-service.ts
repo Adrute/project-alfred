@@ -79,12 +79,19 @@ function formatProfile(profile: NonNullable<Awaited<ReturnType<typeof getStudent
         return `- ${record.teachingAssignment.subject.name} · ${record.teachingAssignment.classroom.name}: progreso ${record.progressStatus}, participación ${record.participationStatus}, tareas ${record.homeworkStatus}; ${grades}${record.teacherNotes ? `. Nota docente: ${record.teacherNotes}` : ""}`;
       }).join("\n")
     : "- No hay seguimiento por asignatura registrado.";
+  const confirmedFeedback = profile.teacherFeedbacks.filter((item) => item.familyVersionStatus === "confirmed" && item.familyVersion);
+  const teacherFeedback = confirmedFeedback.length
+    ? confirmedFeedback.map((item) => `- ${item.subject ?? "Comentario general"}: ${item.familyVersion}`).join("\n")
+    : "- No hay comentarios docentes confirmados para la familia.";
+  const pendingFeedback = profile.teacherFeedbacks.filter((item) => item.familyVersionStatus !== "confirmed").length;
   return [
     `Esto es lo que consta sobre ${profile.firstName} ${profile.lastName}:`,
     `Grupo: ${profile.enrollments[0]?.classroom.name ?? "sin grupo activo"}.`,
     "", "Observaciones confirmadas:", observations,
     "", "Relaciones contextuales activas:", relationships.length ? relationships.map((item) => `- ${item}`).join("\n") : "- Ninguna registrada.",
     "", "Seguimiento académico por asignatura:", academic,
+    "", "Comentarios del profesorado preparados para tutoría:", teacherFeedback,
+    ...(pendingFeedback ? ["", `${pendingFeedback} ${pendingFeedback === 1 ? "comentario pendiente" : "comentarios pendientes"} de revisión docente.`] : []),
     "", "No he añadido interpretaciones ni datos que no estén registrados.",
   ].join("\n");
 }

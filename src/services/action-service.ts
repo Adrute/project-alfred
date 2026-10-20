@@ -67,9 +67,26 @@ export async function confirmAction(actionId: string) {
         }});
       }
     } else if (payload.type === "save_tutoring") {
-      const tutoring = await tx.tutoringSession.create({ data: {
-        studentId: payload.studentId, status: "prepared", preparation: payload.preparation,
-      }});
+      const scheduled = await tx.tutoringSession.findFirst({
+        where: {
+          studentId: payload.studentId,
+          status: { in: ["draft", "prepared"] },
+          scheduledAt: { gte: new Date() },
+        },
+        orderBy: { scheduledAt: "asc" },
+      });
+      const upcoming = scheduled ?? await tx.tutoringSession.findFirst({
+        where: { studentId: payload.studentId, status: { in: ["draft", "prepared"] }, scheduledAt: null },
+        orderBy: { createdAt: "desc" },
+      });
+      const tutoring = upcoming
+        ? await tx.tutoringSession.update({
+          where: { id: upcoming.id },
+          data: { status: "prepared", preparation: payload.preparation },
+        })
+        : await tx.tutoringSession.create({ data: {
+          studentId: payload.studentId, status: "prepared", preparation: payload.preparation,
+        }});
       entityId = tutoring.id;
     } else if (payload.type === "save_layout") {
       const layout = await tx.seatingLayout.create({ data: {

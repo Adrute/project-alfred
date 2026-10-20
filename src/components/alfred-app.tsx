@@ -8,6 +8,7 @@ import { PlanningView } from "@/components/planning-view";
 import { AdminView } from "@/components/admin-view";
 import { TeachingView } from "@/components/teaching-view";
 import { TutorGroupView } from "@/components/tutor-group-view";
+import { TeacherFeedbackPanel, type TeacherFeedback } from "@/components/teacher-feedback-panel";
 import { parseStudentNames } from "@/domain/student-admin";
 import { weightedGradeAverage } from "@/domain/teaching";
 import { MarkdownMessage, plainMarkdown } from "@/components/markdown-message";
@@ -24,7 +25,7 @@ interface StudentClassroomContext {
   id: string; name: string; isTutorGroup: boolean;
   teachingAssignments: Array<{ id: string; subject: { id: string; name: string; color: string } }>;
 }
-interface Student { id: string; firstName: string; lastName: string; observations: Observation[]; enrollments: Array<{ classroom: StudentClassroomContext }>; tutoringSessions: Array<{ id: string }>; subjectRecords: SubjectRecord[] }
+interface Student { id: string; firstName: string; lastName: string; observations: Observation[]; teacherFeedbacks: TeacherFeedback[]; enrollments: Array<{ classroom: StudentClassroomContext }>; tutoringSessions: Array<{ id: string }>; subjectRecords: SubjectRecord[] }
 interface Classroom { id: string; name: string; academicYear: string; educationalStage: string; isTutorGroup: boolean; enrollments: Array<{ student: Student }>; seatingLayouts: Array<{ id: string }> }
 interface Agreement { id: string; description: string; status: string; dueDate: string | null }
 interface Tutoring { id: string; status: string; preparation: string | null; notes: string | null; createdAt: string; student: Student; agreements: Agreement[] }
@@ -92,6 +93,7 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
   const [tutorFocusStudentId, setTutorFocusStudentId] = useState<string>();
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [planningContext, setPlanningContext] = useState("Vista semanal de la planificación docente.");
   const [teachingContext, setTeachingContext] = useState<ContextualViewState>({ summary: "Asignaturas y grupos impartidos por la profesora." });
   const [tutoringContext, setTutoringContext] = useState<ContextualViewState>({ summary: "Grupo tutor y seguimiento tutorial de la profesora." });
@@ -118,6 +120,22 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
       if (parameters.has("chatgpt")) window.history.replaceState({}, "", window.location.pathname);
     });
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setSidebarCollapsed(window.localStorage.getItem("alfred.sidebar.collapsed") === "true");
+    });
+    return () => { active = false; };
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("alfred.sidebar.collapsed", String(next));
+      return next;
+    });
+  };
 
   const disconnectChatGpt = async () => {
     try {
@@ -146,7 +164,7 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
     };
     if (view === "students" && selectedStudent) return {
       view, label,
-      summary: `Ficha visible de ${selectedStudent.firstName} ${selectedStudent.lastName}, del grupo ${selectedStudent.enrollments[0]?.classroom.name ?? "sin grupo"}, con ${selectedStudent.observations.length} observaciones registradas.`,
+      summary: `Ficha visible de ${selectedStudent.firstName} ${selectedStudent.lastName}, del grupo ${selectedStudent.enrollments[0]?.classroom.name ?? "sin grupo"}, con ${selectedStudent.observations.length} observaciones y ${selectedStudent.teacherFeedbacks.length} comentarios docentes registrados.`,
       studentIds: [selectedStudent.id], studentNames: [`${selectedStudent.firstName} ${selectedStudent.lastName}`],
     };
     if (view === "tutoring") return { view, label, summary: tutoringContext.summary, studentIds: tutoringContext.studentId ? [tutoringContext.studentId] : [], studentNames: tutoringContext.studentName ? [tutoringContext.studentName] : [] };
@@ -234,12 +252,13 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
     setView("tutoring");
   };
 
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <div className="sidebar-brand"><AlfredAvatar className="sidebar-brand-avatar" size={38}/><div><strong>Alfred</strong><small>Asistente docente</small></div></div>
-      <nav>{nav.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><i>{item.icon}</i>{item.label}</button>)}</nav>
-      <div className="local-card"><span className="status-dot is-ready"/><div><strong>Datos locales</strong><small>{chatGpt.planEnabled ? "GPT activo · nombres protegidos" : "Modo manual · SQLite"}</small></div></div>
-      <div className="teacher-card"><div className="teacher-avatar">P</div><div><strong>Profesora</strong><small>Curso 2026–2027</small></div></div>
+  return <div className={`app-shell${sidebarCollapsed ? " sidebar-is-collapsed" : ""}`}>
+    <aside className="sidebar" aria-label="Navegación principal">
+      <div className="sidebar-brand"><AlfredAvatar className="sidebar-brand-avatar" size={38}/><div className="sidebar-brand-copy"><strong>Alfred</strong><small>Asistente docente</small></div></div>
+      <button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"} aria-expanded={!sidebarCollapsed} onClick={toggleSidebar}>{sidebarCollapsed ? "›" : "‹"}</button>
+      <nav>{nav.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined} onClick={() => setView(item.id)}><i>{item.icon}</i><span className="nav-label">{item.label}</span></button>)}</nav>
+      <div className="local-card"><span className="status-dot is-ready"/><div className="sidebar-card-copy"><strong>Datos locales</strong><small>{chatGpt.planEnabled ? "GPT activo · nombres protegidos" : "Modo manual · SQLite"}</small></div></div>
+      <div className="teacher-card"><div className="teacher-avatar">P</div><div className="sidebar-card-copy"><strong>Profesora</strong><small>Curso 2026–2027</small></div></div>
     </aside>
     <main className="workspace">
       <header className="workspace-header"><div><p className="eyebrow">{nav.find((item) => item.id === view)?.label}</p><h1>{view === "home" ? "Tu día" : nav.find((item) => item.id === view)?.label}</h1></div><div className="header-actions"><ChatGptControl status={chatGpt} disconnect={disconnectChatGpt}/><span>{new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</span><button onClick={() => void refresh()} aria-label="Actualizar datos">↻</button></div></header>
@@ -460,6 +479,7 @@ function StudentsView({ students, classrooms, selected, search, setSearch, selec
       {tutorEnrollment && <button className="tutor-context-card" onClick={() => openTutor(selected.id)}><span>◷</span><div><p className="eyebrow">Seguimiento tutorial</p><strong>Mi tutoría · {tutorEnrollment.classroom.name}</strong><small>Familia, reuniones, acuerdos y seguimiento general</small></div><b>Abrir ficha tutorial →</b></button>}
       <div className="subject-context-grid">{teachingContexts.length ? teachingContexts.map(({ assignment, classroom, record }) => { const average = weightedGradeAverage(record?.grades ?? []); return <button key={assignment.id} className="subject-context-card" style={{ "--subject-color": assignment.subject.color } as CSSProperties} onClick={() => openTeaching(assignment.id, selected.id)}><i/><div><p className="eyebrow">Seguimiento académico</p><strong>{assignment.subject.name}</strong><small>{classroom.name} · solo esta asignatura</small></div><span><strong>{average === null ? "—" : average.toFixed(1)}</strong><small>media</small></span><b>Abrir →</b></button>; }) : <p className="quiet-copy">No impartes ninguna asignatura a este alumno.</p>}</div>
     </div>
+    {tutorEnrollment && <TeacherFeedbackPanel key={selected.id} studentId={selected.id} feedbacks={selected.teacherFeedbacks} onChanged={refresh} />}
     <div className="detail-block"><div className="profile-section-heading"><div><p className="eyebrow">Memoria general</p><h3>Observaciones registradas</h3></div><p>No se mezclan con las notas de una asignatura concreta.</p></div>{selected.observations.length ? selected.observations.map((item) => <ObservationCard key={item.id} item={item} refresh={refresh}/>) : <Empty text="Aún no hay observaciones."/>}</div></> : <Empty text="Selecciona un alumno."/>}</section></div></div>;
 }
 

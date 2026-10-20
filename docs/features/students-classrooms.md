@@ -16,6 +16,7 @@ grupo tutor, sin mezclar ambos seguimientos.
 
 - `Student` representa a la persona y `StudentEnrollment` su pertenencia a un `Classroom`.
 - `StudentObservation` conserva historial; una observación nueva nunca reemplaza otra.
+- Los tutorandos exponen desde su ficha general el mismo panel de comentarios docentes que su ficha tutorial.
 - Ante coincidencias ambiguas se pregunta, no se inventa ni se elige silenciosamente.
 - Toda alta o edición por lenguaje natural pasa por `PendingAction` y confirmación.
 

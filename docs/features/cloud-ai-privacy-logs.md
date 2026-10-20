@@ -10,7 +10,10 @@ salida estructurada y panel de auditoría de peticiones cloud.
 La aplicación funciona manualmente sin sesión. Al conectar ChatGPT, el proveedor recibe contenido
 seudonimizado y herramientas tipadas con `store: false`. Antes de enviar, crea una traza; al terminar
 registra respuesta observable, modelo, uso, duración y error. Los alias se revierten localmente al mostrar
-la respuesta. El modelo efectivo puede configurarse por agente generativo.
+la respuesta. El modelo efectivo puede configurarse por agente generativo y Administración agrega los
+tokens por agente sin procesar el contenido de las trazas.
+La reformulación de comentarios docentes reutiliza la misma pasarela: el nombre del alumno se sustituye
+antes de enviar el texto y la respuesta se revierte localmente antes de guardar una propuesta.
 
 ## Fuente de verdad e invariantes
 

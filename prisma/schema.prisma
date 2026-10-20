@@ -37,15 +37,15 @@ model Subject {
 }
 
 model TeachingAssignment {
-  id             String          @id @default(cuid())
+  id             String                 @id @default(cuid())
   subjectId      String
   classroomId    String
   academicYear   String
-  active         Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  subject        Subject         @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  classroom      Classroom       @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  active         Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  subject        Subject                @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  classroom      Classroom              @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   timetableSlots TimetableSlot[]
   teachingUnits  TeachingUnit[]
   lessonPlans    LessonPlan[]
@@ -223,16 +223,17 @@ model PlanningChange {
 }
 
 model Student {
-  id                 String                @id @default(cuid())
+  id                 String                 @id @default(cuid())
   firstName          String
   lastName           String
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
   enrollments        StudentEnrollment[]
   observations       StudentObservation[]
-  relationshipsAsA   StudentRelationship[] @relation("StudentA")
-  relationshipsAsB   StudentRelationship[] @relation("StudentB")
+  relationshipsAsA   StudentRelationship[]  @relation("StudentA")
+  relationshipsAsB   StudentRelationship[]  @relation("StudentB")
   tutoringSessions   TutoringSession[]
+  teacherFeedbacks   TeacherFeedback[]
   seatingAssignments SeatingAssignment[]
   subjectRecords     StudentSubjectRecord[]
 
@@ -328,19 +329,41 @@ model StudentRelationship {
 }
 
 model TutoringSession {
-  id          String              @id @default(cuid())
-  studentId   String
-  scheduledAt DateTime?
-  status      String              @default("draft")
-  preparation String?
-  notes       String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  agreements  TutoringAgreement[]
+  id               String              @id @default(cuid())
+  studentId        String
+  scheduledAt      DateTime?
+  status           String              @default("draft")
+  preparation      String?
+  notes            String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  student          Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  agreements       TutoringAgreement[]
+  teacherFeedbacks TeacherFeedback[]
 
   @@index([studentId, scheduledAt])
   @@index([status, scheduledAt])
+}
+
+model TeacherFeedback {
+  id                  String           @id @default(cuid())
+  studentId           String
+  tutoringSessionId   String?
+  teacherName         String?
+  subject             String?
+  originalComment     String
+  familyVersion       String?
+  familyVersionSource String?
+  familyVersionStatus String           @default("proposed")
+  receivedAt          DateTime         @default(now())
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  student             Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tutoringSession     TutoringSession? @relation(fields: [tutoringSessionId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, receivedAt])
+  @@index([tutoringSessionId])
+  @@index([familyVersionStatus, receivedAt])
 }
 
 model TutoringAgreement {
@@ -358,11 +381,11 @@ model TutoringAgreement {
 }
 
 model Conversation {
-  id                 String         @id @default(cuid())
+  id                 String              @id @default(cuid())
   title              String
-  contextJson        String         @default("{}")
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  contextJson        String              @default("{}")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   messages           Message[]
   agentConversations AgentConversation[]
   cloudAiTraces      CloudAiTrace[]

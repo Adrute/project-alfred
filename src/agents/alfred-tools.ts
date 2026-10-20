@@ -219,7 +219,7 @@ const tools: AlfredTool[] = [
   },
   {
     name: "get_student_profile",
-    description: "Obtiene la ficha completa de un alumno: grupo, observaciones, relaciones y seguimiento académico confirmado por cada asignatura, incluidas calificaciones. Requiere una referencia sin ambigüedad.",
+    description: "Obtiene la ficha completa de un alumno: grupo, observaciones, comentarios del profesorado para tutoría, relaciones y seguimiento académico confirmado por cada asignatura, incluidas calificaciones. Requiere una referencia sin ambigüedad.",
     schema: studentReferenceInput,
     async execute(raw) {
       await requireAgentRunning("memory-agent");
@@ -232,6 +232,14 @@ const tools: AlfredTool[] = [
         ok: true,
         student: { id: profile.id, name: `${profile.firstName} ${profile.lastName}`, classroom: profile.enrollments[0]?.classroom.name ?? null },
         observations: profile.observations.map((item) => ({ date: item.observedAt.toISOString().slice(0, 10), content: item.content, category: item.category })),
+        teacherFeedback: profile.teacherFeedbacks.map((item) => ({
+          date: item.receivedAt.toISOString().slice(0, 10),
+          teacher: item.teacherName,
+          subject: item.subject,
+          originalComment: item.originalComment,
+          familyVersion: item.familyVersion,
+          status: item.familyVersionStatus,
+        })),
         relationships: [
           ...profile.relationshipsAsA.map((item) => ({ student: `${item.studentB.firstName} ${item.studentB.lastName}`, type: item.relationshipType, description: item.description })),
           ...profile.relationshipsAsB.map((item) => ({ student: `${item.studentA.firstName} ${item.studentA.lastName}`, type: item.relationshipType, description: item.description })),

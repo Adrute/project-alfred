@@ -26,6 +26,7 @@ export async function listStudents(classroomId?: string) {
         include: { classroom: { include: { teachingAssignments: { where: { active: true }, include: { subject: true } } } } },
       },
       observations: { orderBy: { observedAt: "desc" }, take: 5 },
+      teacherFeedbacks: { orderBy: { receivedAt: "desc" }, take: 10 },
       tutoringSessions: { orderBy: { createdAt: "desc" }, take: 3 },
       subjectRecords: {
         include: {
@@ -120,6 +121,7 @@ export async function getStudentProfile(studentId: string) {
         include: { classroom: { include: { teachingAssignments: { where: { active: true }, include: { subject: true } } } } },
       },
       observations: { orderBy: { observedAt: "desc" } },
+      teacherFeedbacks: { orderBy: { receivedAt: "desc" } },
       relationshipsAsA: { where: { active: true }, include: { studentB: true }, orderBy: { observedAt: "desc" } },
       relationshipsAsB: { where: { active: true }, include: { studentA: true }, orderBy: { observedAt: "desc" } },
       tutoringSessions: { include: { agreements: true }, orderBy: { createdAt: "desc" } },

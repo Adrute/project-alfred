@@ -9,7 +9,11 @@ const tutorClassroomInclude = {
       student: {
         include: {
           observations: { orderBy: { observedAt: "desc" as const }, take: 5 },
-          tutoringSessions: { include: { agreements: true }, orderBy: { createdAt: "desc" as const } },
+          teacherFeedbacks: { orderBy: { receivedAt: "desc" as const } },
+          tutoringSessions: {
+            include: { agreements: true, teacherFeedbacks: { orderBy: { receivedAt: "desc" as const } } },
+            orderBy: { createdAt: "desc" as const },
+          },
         },
       },
     },

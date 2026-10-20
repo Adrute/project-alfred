@@ -8,6 +8,12 @@ preparar una entrega.
 
 ### Added
 
+- Flujo de comentarios del profesorado por alumno: conserva el original, propone una redacción respetuosa
+  para la familia, permite revisarla y la vincula tras confirmación a la próxima tutoría.
+- Menú lateral colapsable con preferencia persistente y comportamiento accesible en escritorio y móvil.
+- Métricas de tokens por agente generativo, media por petición y gráfica comparativa de consumo.
+- Exportación local configurable a CSV o Excel con varias hojas, tipos de datos y protección frente a
+  fórmulas inyectadas.
 - Equipo de desarrollo multiagente neutral, con adaptadores para Codex y Claude Code, perfiles de coste,
   roles especializados y validación automática.
 - Catálogo de contexto por funcionalidad en `docs/features/` para trabajar sin explorar todo el repositorio.
@@ -25,6 +31,7 @@ preparar una entrega.
 
 ### Fixed
 
+- El seed reutiliza franjas horarias por su clave de calendario y puede repetirse sobre una base existente.
 - Las continuaciones conversacionales reutilizan filtros, alumnado y tema previos en vez de perder el foco.
 - Las consultas alimentarias se enrutan a la memoria del alumnado y no a la organización de asientos.
 - El chat y sus paneles disponen de desplazamiento independiente para conversaciones largas.

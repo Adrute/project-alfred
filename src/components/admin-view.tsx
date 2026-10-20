@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 
 interface AgentCapability { id: string; description: string; mutatesData: boolean }
 interface AgentExecution { id: string; operation: string; status: string; startedAt: string; finishedAt: string | null; error: string | null }
+interface AgentTokenUsage { requests: number; measuredRequests: number; inputTokens: number; outputTokens: number; totalTokens: number; averageTokensPerRequest: number }
 interface AgentInfo {
   id: string; name: string; description: string; capabilities: AgentCapability[];
-  ai: { usesAi: boolean; configuredModel: string | null };
+  ai: { usesAi: boolean; configuredModel: string | null; tokenUsage: AgentTokenUsage };
   runtime: { status: "running" | "stopped"; startedAt: string | null; stoppedAt: string | null; restartedAt: string | null; restartCount: number };
   statistics: { totalExecutions: number; executionsToday: number; completed: number; failed: number; successRate: number; averageDurationMs: number; lastExecutionAt: string | null; operations: Array<{ operation: string; count: number }> };
   recentExecutions: AgentExecution[];
@@ -37,6 +38,7 @@ interface CloudAiLogDashboard {
   histogram: Array<{ at: string; count: number }>;
   logs: CloudAiLog[];
 }
+interface ExportDataset { id: string; title: string; description: string; includesPersonalData: boolean }
 
 async function getAgents(): Promise<AgentInfo[]> {
   const response = await fetch("/api/admin/agents", { cache: "no-store" });
@@ -58,7 +60,7 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
   const [busyId, setBusyId] = useState<string>();
   const [error, setError] = useState("");
   const [modelCatalog, setModelCatalog] = useState<AiModelCatalog>({ connected: false, defaultModel: null, models: [] });
-  const [section, setSection] = useState<"agents" | "a2a" | "logs" | "database">("agents");
+  const [section, setSection] = useState<"agents" | "a2a" | "logs" | "database" | "exports">("agents");
   useEffect(() => { void getAgents().then(setAgents).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "No se pudieron cargar los agentes.")); }, []);
   useEffect(() => { void getAiModels().then(setModelCatalog).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "No se pudo cargar el catálogo de modelos.")); }, []);
   const selected = agents.find((agent) => agent.id === selectedId) ?? agents[0];
@@ -67,8 +69,12 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
     stopped: agents.filter((agent) => agent.runtime.status === "stopped").length,
     today: agents.reduce((sum, agent) => sum + agent.statistics.executionsToday, 0),
   }), [agents]);
+  const aiAgents = useMemo(() => agents.filter((agent) => agent.ai.usesAi), [agents]);
+  const maxAgentTokens = Math.max(1, ...aiAgents.map((agent) => agent.ai.tokenUsage.totalTokens));
   useEffect(() => {
-    onContextChange?.(section === "database"
+    onContextChange?.(section === "exports"
+      ? "Exportación local de datos seleccionados a CSV o libro Excel con varias hojas."
+      : section === "database"
       ? "Administrador local de la base de datos: tablas, registros y herramientas de borrado seguro."
       : section === "logs"
       ? "Logs auditables de las peticiones seudonimizadas enviadas a ChatGPT y sus respuestas observables."
@@ -102,21 +108,26 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
   };
 
   return <div className="admin-page">
-    <div className="admin-tabs" role="tablist" aria-label="Administración"><button role="tab" aria-selected={section === "agents"} className={section === "agents" ? "active" : ""} onClick={() => setSection("agents")}>Agentes</button><button role="tab" aria-selected={section === "a2a"} className={section === "a2a" ? "active" : ""} onClick={() => setSection("a2a")}>Conversaciones A2A</button><button role="tab" aria-selected={section === "logs"} className={section === "logs" ? "active" : ""} onClick={() => setSection("logs")}>Logs</button><button role="tab" aria-selected={section === "database"} className={section === "database" ? "active" : ""} onClick={() => setSection("database")}>Base de datos</button></div>
+    <div className="admin-tabs" role="tablist" aria-label="Administración"><button role="tab" aria-selected={section === "agents"} className={section === "agents" ? "active" : ""} onClick={() => setSection("agents")}>Agentes</button><button role="tab" aria-selected={section === "a2a"} className={section === "a2a" ? "active" : ""} onClick={() => setSection("a2a")}>Conversaciones A2A</button><button role="tab" aria-selected={section === "logs"} className={section === "logs" ? "active" : ""} onClick={() => setSection("logs")}>Logs</button><button role="tab" aria-selected={section === "exports"} className={section === "exports" ? "active" : ""} onClick={() => setSection("exports")}>Exportación</button><button role="tab" aria-selected={section === "database"} className={section === "database" ? "active" : ""} onClick={() => setSection("database")}>Base de datos</button></div>
     {error && <div className="error-banner">{error}<button onClick={() => setError("")}>×</button></div>}
-    {section === "database" ? <DatabaseAdmin onDataChanged={async () => { await getAgents().then(setAgents); await onDataChanged?.(); }} /> : section === "logs" ? <LogsAdmin/> : section === "a2a" ? <A2AAdmin/> : <>
+    {section === "database" ? <DatabaseAdmin onDataChanged={async () => { await getAgents().then(setAgents); await onDataChanged?.(); }} /> : section === "exports" ? <ExportAdmin/> : section === "logs" ? <LogsAdmin/> : section === "a2a" ? <A2AAdmin/> : <>
     <section className="admin-summary">
       <article><span className="status-dot is-ready"/><div><strong>{totals.running}</strong><small>Agentes activos</small></div></article>
       <article><span className="status-dot is-stopped"/><div><strong>{totals.stopped}</strong><small>Agentes detenidos</small></div></article>
       <article><span>↗</span><div><strong>{totals.today}</strong><small>Ejecuciones hoy</small></div></article>
       <article><span>◉</span><div><strong>{agents.reduce((sum, item) => sum + item.statistics.totalExecutions, 0)}</strong><small>Ejecuciones totales</small></div></article>
     </section>
+    <section className="agent-token-comparison" aria-labelledby="agent-token-chart-title">
+      <header><div><p className="eyebrow">Consumo acumulado</p><h2 id="agent-token-chart-title">Tokens por agente con IA</h2></div><small>Solo peticiones con uso registrado</small></header>
+      <div className="agent-token-bars">{aiAgents.map((agent) => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.ai.tokenUsage.requests} peticiones · media {agent.ai.tokenUsage.averageTokensPerRequest.toLocaleString("es-ES")}</small></div><div className="agent-token-track" aria-label={`${agent.name}: ${agent.ai.tokenUsage.totalTokens} tokens`}><span style={{ width: `${agent.ai.tokenUsage.totalTokens ? Math.max(3, (agent.ai.tokenUsage.totalTokens / maxAgentTokens) * 100) : 0}%` }}/></div><b>{agent.ai.tokenUsage.totalTokens.toLocaleString("es-ES")}</b></article>)}</div>
+    </section>
     <div className="admin-layout">
-      <section className="agent-list"><div className="agent-list-head"><p className="eyebrow">Sistema multiagente</p><h2>Agentes</h2><small>Módulos locales de Alfred</small></div>{agents.map((agent) => <button className={selected?.id === agent.id ? "selected" : ""} key={agent.id} onClick={() => setSelectedId(agent.id)}><span className={`agent-state ${agent.runtime.status}`}/><div><strong>{agent.name}</strong><small>{agent.capabilities.length} capacidades · {agent.statistics.totalExecutions} usos{agent.ai.usesAi ? " · IA" : ""}</small></div><b>›</b></button>)}</section>
+      <section className="agent-list"><div className="agent-list-head"><p className="eyebrow">Sistema multiagente</p><h2>Agentes</h2><small>Módulos locales de Alfred</small></div>{agents.map((agent) => <button className={selected?.id === agent.id ? "selected" : ""} key={agent.id} onClick={() => setSelectedId(agent.id)}><span className={`agent-state ${agent.runtime.status}`}/><div><strong>{agent.name}</strong><small>{agent.capabilities.length} capacidades · {agent.statistics.totalExecutions} usos{agent.ai.usesAi ? ` · ${agent.ai.tokenUsage.totalTokens.toLocaleString("es-ES")} tokens` : ""}</small></div><b>›</b></button>)}</section>
       <section className="agent-detail">{selected ? <>
         <header><div><p className="eyebrow">Detalle del agente</p><h2>{selected.name}</h2><p>{selected.description}</p></div><span className={`runtime-badge ${selected.runtime.status}`}>{selected.runtime.status === "running" ? "● Activo" : "■ Detenido"}</span></header>
         <div className="agent-controls"><button disabled={busyId === selected.id || selected.runtime.status === "running"} onClick={() => void control(selected.id, "start")}>▶ Iniciar</button><button disabled={busyId === selected.id || selected.runtime.status === "stopped"} onClick={() => void control(selected.id, "stop")}>■ Detener</button><button disabled={busyId === selected.id} onClick={() => void control(selected.id, "restart")}>↻ Reiniciar</button><small>{busyId === selected.id ? "Aplicando…" : `Reinicios: ${selected.runtime.restartCount}`}</small></div>
         {selected.ai.usesAi && <div className="agent-model-config"><div><span>✦</span><div><strong>Modelo de inteligencia artificial</strong><small>{modelCatalog.connected ? "Elige el modelo para las tareas generativas de este agente." : "Conecta ChatGPT para consultar y seleccionar los modelos disponibles."}</small></div></div><label>Modelo<select aria-label={`Modelo de IA de ${selected.name}`} disabled={!modelCatalog.connected || busyId === selected.id} value={selected.ai.configuredModel ?? ""} onChange={(event) => void configureModel(selected.id, event.target.value)}><option value="">Automático{modelCatalog.defaultModel ? ` · ${modelCatalog.defaultModel}` : ""}</option>{selected.ai.configuredModel && !modelCatalog.models.some((model) => model.id === selected.ai.configuredModel) && <option value={selected.ai.configuredModel}>{selected.ai.configuredModel} · no disponible ahora</option>}{modelCatalog.models.map((model) => <option key={model.id} value={model.id}>{model.label}{model.label !== model.id ? ` · ${model.id}` : ""}</option>)}</select></label><p>Modelo efectivo: <strong>{selected.ai.configuredModel ?? modelCatalog.defaultModel ?? "modo manual"}</strong>. Las peticiones aparecerán con este valor en Logs.</p></div>}
+        {selected.ai.usesAi && <div className="agent-token-metrics"><article><strong>{selected.ai.tokenUsage.totalTokens.toLocaleString("es-ES")}</strong><small>Tokens totales</small></article><article><strong>{selected.ai.tokenUsage.averageTokensPerRequest.toLocaleString("es-ES")}</strong><small>Media por petición</small></article><article><strong>{selected.ai.tokenUsage.inputTokens.toLocaleString("es-ES")} / {selected.ai.tokenUsage.outputTokens.toLocaleString("es-ES")}</strong><small>Entrada / salida</small></article><article><strong>{selected.ai.tokenUsage.measuredRequests} de {selected.ai.tokenUsage.requests}</strong><small>Peticiones medidas</small></article></div>}
         <div className="agent-metrics"><article><strong>{selected.statistics.totalExecutions}</strong><small>Ejecuciones</small></article><article><strong>{selected.statistics.successRate}%</strong><small>Éxito</small></article><article><strong>{selected.statistics.averageDurationMs} ms</strong><small>Duración media</small></article><article><strong>{selected.statistics.failed}</strong><small>Errores</small></article></div>
         <div className="agent-section"><h3>Capacidades</h3>{selected.capabilities.map((item) => <article className="capability-row" key={item.id}><span>{item.mutatesData ? "Escritura" : "Lectura"}</span><div><strong>{item.id}</strong><p>{item.description}</p></div></article>)}</div>
         <div className="agent-section"><h3>Actividad reciente</h3>{selected.recentExecutions.length ? selected.recentExecutions.map((item) => <article className="execution-row" key={item.id}><span className={`status-dot ${item.status === "completed" ? "is-ready" : "is-stopped"}`}/><div><strong>{item.operation}</strong><small>{new Date(item.startedAt).toLocaleString("es-ES")}</small>{item.error && <p>{item.error}</p>}</div><time>{item.finishedAt ? `${new Date(item.finishedAt).getTime() - new Date(item.startedAt).getTime()} ms` : "En curso"}</time></article>) : <p className="muted-copy">Este agente todavía no tiene ejecuciones.</p>}</div>
@@ -279,6 +290,84 @@ function A2AAdmin() {
     <section className="admin-summary"><article><span>⇄</span><div><strong>{data.totalConversations}</strong><small>Conversaciones A2A</small></div></article><article><span>✦</span><div><strong>{data.totalMessages}</strong><small>Mensajes entre agentes</small></div></article><article><span>◎</span><div><strong>{data.protocol}</strong><small>Protocolo interno</small></div></article><article><span className="status-dot is-ready"/><div><strong>Local</strong><small>Sin servicios externos</small></div></article></section>
     <section className="a2a-layout"><aside className="a2a-thread-list"><header><div><p className="eyebrow">Trazabilidad</p><h2>Intercambios</h2></div><button disabled={busy} onClick={() => void load()}>↻</button></header>{data.conversations.length ? data.conversations.map((conversation) => <button className={selected?.id === conversation.id ? "selected" : ""} key={conversation.id} onClick={() => setSelectedId(conversation.id)}><span className={`agent-state ${conversation.status === "completed" ? "running" : "stopped"}`}/><div><strong>{conversation.messages[0]?.capability.replaceAll("_", " ") ?? conversation.title}</strong><small>{conversation.messages[0] ? `${agentLabel(conversation.messages[0].fromAgentId)} → ${agentLabel(conversation.messages[0].toAgentId)}` : conversation.title}</small><time>{new Date(conversation.createdAt).toLocaleString("es-ES")}</time></div></button>) : <p className="muted-copy">Habla con Alfred para generar el primer intercambio A2A.</p>}</aside><div className="a2a-thread-detail">{selected ? <><header><div><p className="eyebrow">Conversación A2A</p><h2>{selected.messages[0]?.capability.replaceAll("_", " ") ?? selected.title}</h2><small>{selected.requestId} · {new Date(selected.createdAt).toLocaleString("es-ES")}</small></div><span className={`runtime-badge ${selected.status === "completed" ? "running" : "stopped"}`}>{selected.status === "completed" ? "● Completada" : "■ Con error"}</span></header><div className="a2a-timeline">{selected.messages.map((message) => <article className={`a2a-message ${message.kind}`} key={message.id}><div className="a2a-route"><strong>{agentLabel(message.fromAgentId)}</strong><span>→</span><strong>{agentLabel(message.toAgentId)}</strong><time>{new Date(message.createdAt).toLocaleTimeString("es-ES")}</time></div><p>{message.content}</p><details><summary>Datos estructurados</summary><pre>{JSON.stringify(message.payload, null, 2)}</pre></details></article>)}</div></> : <div className="detail-placeholder">Selecciona un intercambio.</div>}</div></section>
     <p className="a2a-privacy-note">Solo se guardan solicitudes estructuradas y respuestas finales. No se registra el razonamiento interno del modelo.</p>
+  </div>;
+}
+
+function ExportAdmin() {
+  const [datasets, setDatasets] = useState<ExportDataset[]>([]);
+  const [selected, setSelected] = useState<string[]>(["students"]);
+  const [format, setFormat] = useState<"csv" | "xlsx">("xlsx");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/admin/exports", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json() as { datasets?: ExportDataset[]; error?: string };
+        if (!response.ok || !body.datasets) throw new Error(body.error ?? "No se pudo cargar el catálogo de exportación.");
+        return body.datasets;
+      })
+      .then((items) => { if (active) setDatasets(items); })
+      .catch((caught: unknown) => { if (active) setError(caught instanceof Error ? caught.message : "No se pudo cargar el catálogo de exportación."); });
+    return () => { active = false; };
+  }, []);
+
+  const toggleDataset = (id: string) => {
+    setSuccess("");
+    setSelected((current) => {
+      if (format === "csv") return current.includes(id) ? current : [id];
+      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    });
+  };
+
+  const changeFormat = (next: "csv" | "xlsx") => {
+    setFormat(next);
+    setSuccess("");
+    if (next === "csv") setSelected((current) => current.slice(0, 1));
+  };
+
+  const download = async () => {
+    if (!selected.length) return;
+    setBusy(true); setError(""); setSuccess("");
+    try {
+      const response = await fetch("/api/admin/exports", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ datasets: selected, format }),
+      });
+      if (!response.ok) {
+        const body = await response.json() as { error?: string };
+        throw new Error(body.error ?? "No se pudo generar la exportación.");
+      }
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `alfred-export.${format}`;
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setSuccess(`${filename} se ha generado correctamente.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo generar la exportación.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const personalDatasets = datasets.filter((dataset) => selected.includes(dataset.id) && dataset.includesPersonalData);
+  return <div className="export-admin">
+    {error && <div className="error-banner">{error}<button onClick={() => setError("")}>×</button></div>}
+    {success && <div className="export-success">{success}<button onClick={() => setSuccess("")}>×</button></div>}
+    <section className="export-intro"><div><p className="eyebrow">Copia local</p><h2>Exportar datos</h2><p>Selecciona la información y el formato. Excel crea una hoja independiente por cada conjunto; CSV exporta uno cada vez.</p></div><span>⇩</span></section>
+    <section className="export-builder">
+      <div className="export-datasets"><header><p className="eyebrow">1 · Contenido</p><h3>¿Qué quieres exportar?</h3></header><div>{datasets.map((dataset) => <label className={selected.includes(dataset.id) ? "selected" : ""} key={dataset.id}><input type="checkbox" checked={selected.includes(dataset.id)} onChange={() => toggleDataset(dataset.id)}/><span><strong>{dataset.title}</strong><small>{dataset.description}</small>{dataset.includesPersonalData && <em>Contiene datos personales</em>}</span></label>)}</div></div>
+      <div className="export-options"><header><p className="eyebrow">2 · Formato</p><h3>Preparar archivo</h3></header><div className="format-options"><label className={format === "xlsx" ? "selected" : ""}><input type="radio" name="export-format" checked={format === "xlsx"} onChange={() => changeFormat("xlsx")}/><span><strong>Excel (.xlsx)</strong><small>Varias hojas, cabeceras fijas y valores tipados.</small></span></label><label className={format === "csv" ? "selected" : ""}><input type="radio" name="export-format" checked={format === "csv"} onChange={() => changeFormat("csv")}/><span><strong>CSV (.csv)</strong><small>Un conjunto de datos, UTF-8 y compatible con Excel.</small></span></label></div><div className="export-selection"><strong>{selected.length}</strong><span>{selected.length === 1 ? "conjunto seleccionado" : "conjuntos seleccionados"}</span></div>{personalDatasets.length > 0 && <p className="export-warning">El archivo incluirá datos personales porque has seleccionado {personalDatasets.map((item) => item.title).join(", ")}. Guárdalo únicamente en una ubicación autorizada.</p>}<button className="export-download" disabled={busy || !selected.length} onClick={() => void download()}>{busy ? "Preparando…" : `Descargar ${format === "xlsx" ? "Excel" : "CSV"}`}</button><small className="export-note">La exportación se genera localmente. Los logs de IA incluyen métricas, pero no el contenido de las peticiones ni las respuestas.</small></div>
+    </section>
   </div>;
 }
 

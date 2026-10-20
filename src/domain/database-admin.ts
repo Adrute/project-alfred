@@ -16,6 +16,7 @@ export const databaseTableKeySchema = z.enum([
   "students",
   "studentEnrollments",
   "studentObservations",
+  "teacherFeedbacks",
   "studentRelationships",
   "studentSubjectRecords",
   "assessmentGrades",

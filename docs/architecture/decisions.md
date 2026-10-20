@@ -140,6 +140,29 @@ crudo ni usa `dangerouslySetInnerHTML`. El historial lateral elimina las marcas 
 en texto plano. De esta forma el formato solicitado al modelo se visualiza correctamente sin convertir
 su salida en una superficie de inyección.
 
+## ADR-017 · Exportación XLSX acotada y local
+
+El módulo de exportación usa `write-excel-file` en el servidor local para crear libros `.xlsx` reales sin
+incorporar una suite de hojas de cálculo al cliente. La biblioteca es multiplataforma, requiere Node 18 o
+superior y añade únicamente compresión como dependencia transitiva. Se descartó ExcelJS porque la versión
+actual introducía una dependencia de producción con vulnerabilidad conocida en la auditoría de npm.
+
+Los conjuntos exportables son un catálogo cerrado y cada consulta se implementa como read model; el usuario
+no puede aportar SQL, nombres de tabla ni rutas. CSV se limita a un conjunto y Excel usa una hoja por conjunto.
+Ambos formatos neutralizan texto con prefijos interpretables como fórmula. Los logs se exportan solo como
+metadatos de uso: no incluyen cuerpos de petición o respuesta, credenciales ni razonamiento interno.
+
+## ADR-018 · Comentarios docentes revisables para tutoría
+
+Los comentarios recibidos de otros profesores se conservan en `TeacherFeedback`, separados tanto de las
+calificaciones por asignatura como de las observaciones generales. El texto original es inmutable desde el
+flujo de revisión; una segunda versión puede proceder de Alfred y siempre se identifica como propuesta.
+
+La profesora puede editar esa propuesta y debe confirmarla antes de asociarla a la próxima `TutoringSession`.
+La preparación posterior reutiliza la sesión en borrador para no separar los comentarios de la reunión. Si
+interviene ChatGPT, el contenido pasa por la seudonimización local existente; sin conexión se ofrece el texto
+original como borrador editable, sin fingir una reformulación generativa.
+
 ## Licencias directas
 
 Next.js, React, Tailwind CSS, Zod, Vitest y `better-sqlite3` usan licencias permisivas; Prisma y Qwen3

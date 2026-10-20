@@ -2,6 +2,13 @@
   "version": 1,
   "features": [
     {
+      "id": "application-shell",
+      "title": "Navegación y estructura de la aplicación",
+      "doc": "docs/features/application-shell.md",
+      "keywords": ["menú", "lateral", "navegación", "colapsar", "expandir", "responsive"],
+      "entryPoints": ["src/components/alfred-app.tsx", "src/app/globals.css", "src/app/layout.tsx"]
+    },
+    {
       "id": "assistant-chat",
       "title": "Alfred y conversaciones",
       "doc": "docs/features/assistant-chat.md",
@@ -26,8 +33,8 @@
       "id": "tutoring",
       "title": "Tutoría y seguimiento tutorial",
       "doc": "docs/features/tutoring.md",
-      "keywords": ["tutoría", "tutorando", "familia", "reunión", "acuerdo", "grupo tutor"],
-      "entryPoints": ["src/components/tutor-group-view.tsx", "src/app/api/tutor-group/route.ts", "src/services/tutoring-service.ts", "src/services/tutor-group-service.ts"]
+      "keywords": ["tutoría", "tutorando", "familia", "reunión", "acuerdo", "grupo tutor", "comentario docente", "profesorado"],
+      "entryPoints": ["src/components/tutor-group-view.tsx", "src/app/api/tutor-group/route.ts", "src/services/tutoring-service.ts", "src/services/tutor-group-service.ts", "src/services/teacher-feedback-service.ts"]
     },
     {
       "id": "planning-curriculum",
@@ -63,6 +70,13 @@
       "doc": "docs/features/database-administration.md",
       "keywords": ["base de datos", "sqlite", "borrar", "registro", "prisma", "migración"],
       "entryPoints": ["src/app/api/admin/database/route.ts", "src/services/database-admin-service.ts", "src/repositories/database-admin-repository.ts", "prisma/schema.prisma"]
+    },
+    {
+      "id": "data-export",
+      "title": "Exportación de datos",
+      "doc": "docs/features/data-export.md",
+      "keywords": ["exportar", "csv", "excel", "xlsx", "descargar", "copia"],
+      "entryPoints": ["src/app/api/admin/exports/route.ts", "src/services/data-export-service.ts", "src/repositories/data-export-repository.ts", "src/domain/data-export.ts"]
     }
   ]
 }

@@ -21,6 +21,8 @@ let alfredAgentModule: typeof import("@/services/alfred-agent-service");
 let conversationContextModule: typeof import("@/services/conversation-context-service");
 let cloudAiLogModule: typeof import("@/services/cloud-ai-log-service");
 let agentAiSettingsModule: typeof import("@/services/agent-ai-settings-service");
+let dataExportModule: typeof import("@/services/data-export-service");
+let teacherFeedbackModule: typeof import("@/services/teacher-feedback-service");
 let classroomId = "";
 
 describe("observation confirmation flow", () => {
@@ -34,6 +36,7 @@ describe("observation confirmation flow", () => {
     sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261018152339_teacher_subject_and_tutor_workspace/migration.sql"), "utf8"));
     sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261019120000_cloud_ai_request_logs/migration.sql"), "utf8"));
     sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261020090000_agent_ai_model_preferences/migration.sql"), "utf8"));
+    sqlite.exec(readFileSync(path.resolve("prisma/migrations/20261020140915_teacher_feedback_tutoring/migration.sql"), "utf8"));
     sqlite.close();
     process.env.DATABASE_URL = `file:${dbPath}`;
     databaseModule = await import("@/lib/database");
@@ -52,6 +55,8 @@ describe("observation confirmation flow", () => {
     conversationContextModule = await import("@/services/conversation-context-service");
     cloudAiLogModule = await import("@/services/cloud-ai-log-service");
     agentAiSettingsModule = await import("@/services/agent-ai-settings-service");
+    dataExportModule = await import("@/services/data-export-service");
+    teacherFeedbackModule = await import("@/services/teacher-feedback-service");
     const classroom = await databaseModule.database.classroom.create({ data: { name: "Prueba", academicYear: "2026-2027", educationalStage: "ESO" } });
     classroomId = classroom.id;
     for (const firstName of ["Lucas", "Marcos", "Elena", "Pablo"]) {
@@ -519,6 +524,47 @@ describe("observation confirmation flow", () => {
     expect((await teachingModule.getTeachingPortfolio())[0]).toHaveProperty("subject");
   });
 
+  it("keeps the original teacher comment and saves only the reviewed version for the next tutoring", async () => {
+    const student = await databaseModule.database.student.findFirstOrThrow({ where: { firstName: "Lucas" } });
+    const created = await teacherFeedbackModule.createTeacherFeedback({
+      studentId: student.id,
+      teacherName: "Profesora de Matemáticas",
+      subject: "Matemáticas",
+      originalComment: "Trabaja bien pero se precipita al resolver problemas.",
+      receivedAt: "2026-10-20",
+    });
+    expect(created.originalComment).toContain("se precipita");
+    expect(created.familyVersionStatus).toBe("proposed");
+    expect(created.tutoringSessionId).toBeNull();
+
+    const confirmed = await teacherFeedbackModule.confirmTeacherFeedback({
+      feedbackId: created.id,
+      familyVersion: "Trabaja con constancia; estamos reforzando que revise cada problema antes de darlo por terminado.",
+    });
+    expect(confirmed.feedback.familyVersionStatus).toBe("confirmed");
+    expect(confirmed.feedback.tutoringSessionId).toBe(confirmed.tutoringSession.id);
+
+    const workspace = await tutorGroupModule.getTutorWorkspace();
+    const tutorStudent = workspace.classroom?.enrollments.find((item) => item.student.id === student.id)?.student;
+    expect(tutorStudent?.teacherFeedbacks[0]).toEqual(expect.objectContaining({
+      originalComment: "Trabaja bien pero se precipita al resolver problemas.",
+      familyVersionStatus: "confirmed",
+    }));
+    expect(tutorStudent?.tutoringSessions.find((item) => item.id === confirmed.tutoringSession.id)?.teacherFeedbacks).toHaveLength(1);
+
+    const preparation = await actionModule.proposeAction({
+      type: "save_tutoring",
+      studentId: student.id,
+      preparation: "Preparación revisada de la próxima tutoría.",
+    });
+    const savedPreparation = await actionModule.confirmAction(preparation.id);
+    expect(savedPreparation.entityId).toBe(confirmed.tutoringSession.id);
+    expect(await databaseModule.database.tutoringSession.findUnique({ where: { id: confirmed.tutoringSession.id } })).toEqual(expect.objectContaining({
+      status: "prepared",
+      preparation: "Preparación revisada de la próxima tutoría.",
+    }));
+  });
+
   it("stores searchable pseudonymized ChatGPT request logs and their observable response", async () => {
     const conversation = await databaseModule.database.conversation.create({ data: { title: "Auditoría" } });
     const startedAt = new Date();
@@ -545,11 +591,27 @@ describe("observation confirmation flow", () => {
     expect(dashboard.logs[0]).toEqual(expect.objectContaining({ status: "completed", requestId: "req_test", agentId: "alfred-orchestrator", totalTokens: 15, studentAliasCount: 1 }));
     expect(JSON.stringify(dashboard.logs[0])).toContain("ALUMNO_ABCDEF1234");
     expect(JSON.stringify(dashboard.logs[0])).not.toMatch(/Lucas|Elena|Marcos|Pablo/);
+
+    const alfred = (await agentAdminModule.getAgentDashboard()).find((agent) => agent.id === "alfred-orchestrator");
+    expect(alfred?.ai.tokenUsage).toEqual(expect.objectContaining({
+      requests: 1,
+      measuredRequests: 1,
+      inputTokens: 11,
+      outputTokens: 4,
+      totalTokens: 15,
+      averageTokensPerRequest: 15,
+    }));
+
+    const exported = await dataExportModule.createDataExport({ datasets: ["cloudAiUsage"], format: "xlsx" }, new Date("2026-10-20T12:00:00Z"));
+    expect(exported.filename).toBe("alfred-cloudAiUsage-2026-10-20.xlsx");
+    expect(exported.contentType).toContain("spreadsheetml");
+    expect(exported.content[0]).toBe(0x50);
+    expect(exported.content[1]).toBe(0x4b);
   });
 
   it("browses allowlisted tables and requires exact confirmation before deleting", async () => {
     const overview = await databaseAdminModule.getDatabaseOverview("students");
-    expect(overview.tables).toHaveLength(30);
+    expect(overview.tables).toHaveLength(31);
     expect(overview.selected.label).toBe("Alumnos");
     expect(overview.selected.rows.length).toBeGreaterThan(0);
 
