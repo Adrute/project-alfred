@@ -1,9 +1,10 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { getInternalA2AHistory } from "@/services/internal-a2a-service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
@@ -14,3 +15,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo cargar la actividad A2A." }, { status: 500 });
   }
 }
+
+export const GET = withApiAuth(handleGET, "admin");

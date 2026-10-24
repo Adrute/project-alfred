@@ -1,10 +1,11 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { databaseTableKeySchema } from "@/domain/database-admin";
 import { databaseDeletionScopes, getDatabaseOverview } from "@/services/database-admin-service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const requested = new URL(request.url).searchParams.get("table") ?? "students";
     const table = databaseTableKeySchema.parse(requested);
@@ -13,3 +14,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo consultar la base de datos." }, { status: 400 });
   }
 }
+
+export const GET = withApiAuth(handleGET, "admin");

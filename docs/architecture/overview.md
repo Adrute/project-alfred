@@ -128,10 +128,10 @@ seudonimizado al modelo para que redacte la respuesta. La respuesta recupera los
 Así, filtros, entidades y resultados se mantienen entre turnos sin enumerar cada
 posible formulación.
 
-Las reglas deterministas actúan como modo manual cuando ChatGPT no está conectado o no está disponible. Las
-mutaciones siguen creando una `PendingAction` y requieren confirmación explícita: la selección del
-modelo no amplía permisos. Si el modelo afirma haber ejecutado trabajo sin llamada real, Alfred fuerza
-una autocorrección antes de mostrar la respuesta.
+ChatGPT es el único proveedor de interpretación y razonamiento generativo. Las reglas deterministas no
+lo sustituyen: calculan resultados reproducibles y actúan como barreras de seguridad. Las mutaciones
+siguen creando una `PendingAction` y requieren confirmación explícita; el modelo no amplía permisos. Si
+afirma haber ejecutado trabajo sin llamada real, Alfred fuerza una autocorrección antes de mostrar la respuesta.
 
 Los alias de alumno se calculan con HMAC a partir de un secreto local y el identificador de la
 conversación. No son claves de SQLite, permanecen estables dentro del chat y cambian entre chats. La
@@ -141,12 +141,11 @@ local excluido de Git y nunca se entregan al navegador.
 
 ## Logs de ChatGPT
 
-El proveedor registra una `CloudAiTrace` antes de cada llamada externa. La traza contiene exactamente el
-cuerpo JSON seudonimizado que se envía a Responses API y, al finalizar, una representación de la respuesta
-observable sin elementos de razonamiento. También conserva `x-request-id`, identificador de respuesta,
-modelo, operación, uso de tokens y duración. La pestaña **Administración → Logs** ofrece búsqueda de texto,
-filtros, histograma, detalle JSON y borrado explícito. Las credenciales solo se incorporan a la cabecera de
-red y nunca forman parte de la traza.
+El proveedor registra una `CloudAiTrace` antes de cada llamada externa. La traza conserva solo metadatos
+operativos: `x-request-id`, identificador de respuesta, modelo, operación, uso de tokens y duración. No
+guarda cuerpos de petición o respuesta, mensajes de error potencialmente sensibles ni elementos de
+razonamiento. La pestaña **Administración → Logs** ofrece filtros, histograma y borrado explícito. Las
+credenciales solo se incorporan a la cabecera de red y nunca forman parte de la traza.
 
 `CloudAiTrace.agentId` relaciona cada petición con el agente que la originó. Esto permite comprobar desde
 el panel qué agente usó qué modelo, incluso cuando varios agentes generativos tienen preferencias distintas.

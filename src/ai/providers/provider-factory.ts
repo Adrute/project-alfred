@@ -4,6 +4,7 @@ import { OpenAiResponsesProvider } from "./openai-responses-provider";
 import { getChatGptSession } from "@/services/chatgpt-auth-service";
 import { cloudAiTraceSink } from "@/services/cloud-ai-log-service";
 import { resolveAgentAiModel } from "@/services/agent-ai-settings-service";
+import { assertCloudPayloadIsPseudonymized } from "@/services/student-pseudonymization-service";
 
 export async function getConnectedLlmProvider(traceContext: CloudAiTraceContext = {}): Promise<LlmProvider | null> {
   const session = await getChatGptSession();
@@ -14,5 +15,6 @@ export async function getConnectedLlmProvider(traceContext: CloudAiTraceContext 
     model,
     traceContext,
     traceSink: cloudAiTraceSink,
+    requestGuard: assertCloudPayloadIsPseudonymized,
   });
 }

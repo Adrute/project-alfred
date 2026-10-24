@@ -8,7 +8,9 @@ const booleanFromString = z
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   NEXT_TELEMETRY_DISABLED: z.literal("1").default("1"),
-  HOST: z.literal("127.0.0.1").default("127.0.0.1"),
+  HOST: z.enum(["127.0.0.1", "0.0.0.0"]).default("127.0.0.1"),
+  APP_ORIGIN: z.string().optional(),
+  CLOUD_AI_ENABLED: booleanFromString,
   PORT: z.coerce.number().int().min(1024).max(65535).default(3000),
   OLLAMA_BASE_URL: z
     .string()
@@ -41,5 +43,12 @@ export function isLoopbackUrl(value: string): boolean {
 export function loadConfig(
   source: Record<string, string | undefined> = process.env,
 ): RuntimeConfig {
-  return environmentSchema.parse(source);
+  const config = environmentSchema.parse(source);
+  if (!config.APP_ORIGIN && config.NODE_ENV === "production") throw new Error("APP_ORIGIN is required in production");
+  config.APP_ORIGIN ??= `http://127.0.0.1:${config.PORT}`;
+  const origin = new URL(config.APP_ORIGIN);
+  if (origin.origin !== config.APP_ORIGIN || origin.username || origin.password || (origin.protocol !== "https:" && !isLoopbackUrl(config.APP_ORIGIN))) {
+    throw new Error("APP_ORIGIN must be an exact HTTPS origin or a loopback HTTP origin");
+  }
+  return config;
 }

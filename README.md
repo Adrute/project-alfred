@@ -9,11 +9,11 @@
   Estoy aquí para ayudarte a organizar tus clases, acompañar a tu alumnado y preparar cada día con más calma.
 </p>
 
-Alfred es una plataforma local-first de asistencia docente. La aplicación combina una interfaz web en
-Next.js, memoria estructurada en SQLite y siete agentes coordinados. Funciona manualmente sin ninguna
-cuenta externa y permite conectar opcionalmente ChatGPT para comprender lenguaje natural y realizar
-razonamientos avanzados. Los nombres del alumnado y los datos de contacto se sustituyen localmente por
-alias antes de cada petición; las decisiones y escrituras se validan siempre en código.
+Alfred es una plataforma local-first de asistencia docente. Combina Next.js, memoria estructurada en
+SQLite y siete agentes coordinados. Las cuentas locales distinguen a quienes acceden y reservan las
+operaciones administrativas al rol `admin`; el espacio docente sigue siendo compartido entre las
+cuentas y no implementa aislamiento de datos por usuario. ChatGPT es el único proveedor de razonamiento
+generativo; las reglas locales se limitan a validación, cálculos deterministas y controles de seguridad.
 
 ## Estado
 
@@ -30,13 +30,15 @@ general, las reuniones familiares y sus acuerdos. Ese espacio incluye además co
 profesorado: Alfred conserva el texto original, propone una versión editable para comunicar a la familia
 y, tras confirmación docente, la guarda en la próxima tutoría. El panel
 de Administración muestra los siete agentes, su estado, capacidades, actividad y estadísticas;
-permite controlarlos, elegir el modelo de ChatGPT de cada agente generativo, revisar sus intercambios A2A 1.0 y auditar en **Logs** el contenido seudonimizado
-enviado a ChatGPT, la respuesta observable, el modelo, tokens, duración y errores. También permite explorar
+permite controlarlos, revisar sus intercambios A2A 1.0 y consultar metadatos de trazas. Los cuerpos de
+petición y respuesta no se presentan en Administración; las trazas históricas se devuelven redactadas.
+También permite explorar
 SQLite, borrar registros o áreas con confirmación reforzada y exportar conjuntos seleccionados a CSV o a
 un libro Excel con varias hojas. Las tarjetas de agentes generativos muestran consumo total y medio, junto
 con una comparación visual. El menú lateral puede colapsarse y conserva la preferencia local. El
-recorrido crítico está automatizado con Playwright. Alfred expone además un adaptador local A2A 1.0
-para descubrimiento e interoperabilidad, sin convertir los agentes internos en microservicios.
+recorrido crítico está automatizado con Playwright. Alfred expone además un adaptador A2A 1.0 para
+descubrimiento e interoperabilidad, sin convertir los agentes internos en microservicios. En producción
+requiere sesión `admin` y se alcanza detrás de Tailscale.
 
 ## Vista previa
 
@@ -73,11 +75,10 @@ o regénérala localmente con `npm run preview:capture`.
 
 ## Requisitos
 
-- Node.js 20.9 o posterior (probado con 22.23.3).
+- Node.js `>=22.12.0 <23` (probado con 22.23.3).
 - npm 10 o posterior.
 - Git.
-- Una cuenta de ChatGPT Plus o Pro elegible si se quieren activar las funciones avanzadas de IA.
-- No se necesita ChatGPT para usar las pantallas y operaciones manuales.
+- Para el razonamiento conversacional se necesita una cuenta de ChatGPT elegible para el flujo de uso del plan.
 
 ## Instalación en macOS
 
@@ -97,8 +98,8 @@ En otra terminal:
 npm run dev
 ```
 
-Abrir `http://127.0.0.1:3000`. Para activar la IA, pulsar **Continuar con ChatGPT** y autorizar el uso
-del plan. Las credenciales OAuth se conservan fuera del navegador en `data/auth`, que está excluido de Git.
+Abrir `http://127.0.0.1:3000`. Crea la primera cuenta administrativa como se explica en «Cuentas locales».
+Entra como administrador y usa **Continuar con ChatGPT** para autorizar la cuenta en el navegador local.
 
 ## Instalación en Windows 11
 
@@ -115,7 +116,7 @@ npm run db:seed
 npm run dev
 ```
 
-Abrir `http://127.0.0.1:3000`. No se deben copiar `node_modules` entre macOS y Windows: ejecutar
+Abrir `http://127.0.0.1:3000` y crear la cuenta administrativa. No se deben copiar `node_modules` entre macOS y Windows: ejecutar
 `npm install` en cada sistema. La compatibilidad está contemplada en el código, pero requiere una
 ejecución real en Windows antes de declararla validada.
 
@@ -126,20 +127,33 @@ Copiar `.env.example` a `.env`. Las variables se validan al iniciar:
 | Variable | Valor inicial | Propósito |
 |---|---|---|
 | `NEXT_TELEMETRY_DISABLED` | `1` | Desactiva telemetría de Next.js |
-| `HOST` | `127.0.0.1` | Solo loopback; otros valores se rechazan |
+| `HOST` | `127.0.0.1` | Dirección local; `0.0.0.0` solo dentro del contenedor de producción |
 | `PORT` | `3000` | Puerto local |
-| `CHATGPT_MODEL` | `gpt-6.1-sol` | Modelo preferido cuando está disponible para la cuenta conectada |
+| `APP_ORIGIN` | `http://127.0.0.1:3000` | Origen exacto; en producción debe ser HTTPS |
+| `CLOUD_AI_ENABLED` | `true` | Activa ChatGPT; ponerlo a `false` corta toda comunicación cloud |
+| `CHATGPT_MODEL` | `gpt-6.1-sol` | Modelo preferido, sujeto al catálogo disponible para la cuenta conectada |
 | `DATABASE_URL` | `file:./data/alfred.db` | Archivo SQLite configurable |
 | `DATA_DIRECTORY` | `./data` | Directorio local de datos |
 | `LOG_LEVEL` | `info` | Nivel de registro |
 
-El modelo efectivo se elige del catálogo disponible para la cuenta conectada. Si el modelo preferido
-no está disponible, Alfred utiliza el primero que OpenAI marca como visible para esa cuenta. Sin una
-sesión autorizada no existe ninguna llamada cloud: la aplicación permanece en modo manual.
+El entorno local escucha en loopback. El contenedor Docker usa `HOST=0.0.0.0` para escuchar dentro del
+bridge; el puerto publicado queda limitado al loopback del host.
 
-Después de conectar ChatGPT, **Administración → Agentes** permite asignar un modelo distinto a Alfred,
-MemoryAgent y TutoringAgent. La opción **Automático** hereda el modelo efectivo de la sesión. Los agentes
-deterministas no muestran este control porque no realizan inferencias generativas.
+### Cuentas locales
+
+No hay registro web. Crea la cuenta inicial desde una terminal con acceso al mismo archivo SQLite:
+
+```sh
+npm run auth:user -- create profesora admin "Profesora"
+```
+
+La herramienta solicita la contraseña por TTY sin mostrarla, o la lee desde stdin. Para actualizar usa
+`npm run auth:user -- update usuario admin|user [nombre]`; para listar, `npm run auth:user -- list`; y
+para desactivar, `npm run auth:user -- disable usuario`. Las contraseñas tienen entre 12 y 128 caracteres.
+Actualizar o desactivar revoca las sesiones anteriores. Los roles `admin` y `user` comparten los mismos
+datos docentes; no existe aislamiento por cuenta.
+
+Las sesiones duran 12 horas. Las escrituras validan el origen y un token CSRF.
 
 ## Comandos
 
@@ -154,6 +168,7 @@ npm run test:e2e     # recorrido completo en Chromium
 npm run agents:validate # valida roles y adaptadores del equipo de desarrollo
 npm run branch:check # impide trabajar directamente en main/master o ramas sin convención
 npm run ai:check      # comprueba la conexión OAuth y una salida estructurada de ChatGPT
+npm run ai:credentials -- export|import <ruta> # traslada una sesión protegida a una VPS
 npm run ai:eval       # evalúa la selección de herramientas con la cuenta conectada
 npm run db:generate  # genera Prisma Client
 npm run db:migrate   # crea/aplica una migración de desarrollo
@@ -161,9 +176,10 @@ npm run db:seed      # crea grupos, docencia, tutoría, horario y alumnado ficti
 npm run demo:prepare # añade observaciones ficticias y plano inicial idempotente
 npm run preview:capture # regenera la galería de capturas con datos ficticios
 npm run db:studio    # inspector local de la base
+npm run auth:user -- list # listar cuentas locales
 ```
 
-El endpoint `GET /api/health` informa del estado de SQLite, la conexión opcional con ChatGPT, los agentes y el enlace local.
+`GET /api/health` ofrece una comprobación mínima de disponibilidad de SQLite y no requiere sesión.
 
 ## Equipo de desarrollo multiagente
 
@@ -202,7 +218,8 @@ inyectar HTML procedente del modelo. Los resúmenes del historial se muestran co
 ## Interoperabilidad A2A
 
 Alfred publica una Agent Card A2A 1.0 en `GET /.well-known/agent-card.json`. La interfaz anunciada es
-HTTP+JSON y solo escucha en loopback:
+HTTP+JSON. En local escucha en loopback; en producción requiere sesión `admin` y se alcanza detrás de
+Tailscale Serve:
 
 ```text
 POST /api/a2a/message:send
@@ -231,33 +248,42 @@ reiniciar restablece su estado operativo y registra el reinicio. Las estadístic
 ## Trasladar la base de demostración
 
 1. Detener Alfred en el equipo de origen.
-2. Copiar `data/alfred.db` por un medio autorizado al directorio `data` del destino.
-3. No versionar ni enviar la base mediante el repositorio.
-4. Ejecutar `npm run db:deploy` en el destino antes de arrancar.
+2. Para una demostración local ficticia, copiar la base por un medio autorizado; no versionarla ni enviarla
+   mediante el repositorio.
+3. Para Coolify, conserva el directorio completo de datos y sigue el procedimiento de backup/restauración
+   de [DEPLOYMENT.md](DEPLOYMENT.md), que requiere detener el servicio.
 
 Esta versión solo puede utilizar datos ficticios. Una base con datos reales requiere una política y un
 canal de transferencia aprobados por el centro.
 
 ## Privacidad y seguridad
 
-- La aplicación escucha en `127.0.0.1` por los scripts incluidos.
-- La interfaz y los datos permanecen en loopback; las únicas URLs externas están fijadas en código a
-  los endpoints oficiales de autenticación y Responses de OpenAI.
-- No se incluyen telemetría, CDNs ni analítica. La única salida cloud autorizada es OpenAI cuando la
-  profesora conecta explícitamente su cuenta de ChatGPT.
+- La aplicación local escucha en `127.0.0.1`; el contenedor escucha en `0.0.0.0` dentro de su red bridge
+  y publica el puerto solo en loopback del host.
+- No se incluyen telemetría, CDNs ni analítica. ChatGPT se limita a los endpoints oficiales fijados en
+  código; `CLOUD_AI_ENABLED=false` actúa como corte de emergencia.
 - Los nombres del alumnado, identificadores internos, correos y teléfonos se sustituyen localmente.
-  Los alias son distintos por conversación y no coinciden con las claves de SQLite.
+  Cada alumno usa un alias HMAC-SHA-256 único dentro de la conversación, distinto entre conversaciones y
+  ajeno a las claves de SQLite. Una segunda barrera inspecciona el payload final y bloquea la red si
+  sobrevive cualquier identidad real conocida.
 - Las credenciales OAuth nunca se entregan al navegador, se excluyen de Git y se guardan con permisos
   de propietario cuando el sistema operativo lo permite.
 - Las peticiones de Responses API usan streaming y `store: false`.
-- Cada petición cloud se registra primero en SQLite y puede inspeccionarse en **Administración → Logs**.
-  El registro contiene el cuerpo seudonimizado realmente enviado, la respuesta observable previa a la
-  recuperación local de nombres, IDs de soporte, uso y duración; nunca cabeceras OAuth ni razonamiento interno.
+- Las trazas nuevas guardan metadatos operativos, sin cuerpos de petición ni respuesta. La API de
+  administración también redacta esos campos en registros históricos; nunca expone cabeceras OAuth ni
+  razonamiento interno.
 - El LLM nunca recibe acceso SQL: propone operaciones tipadas, que deben confirmarse y ejecutarse
   mediante servicios de dominio.
 - SQLite no cifra el archivo. Usar FileVault en macOS o BitLocker en Windows.
 
 La guía reproducible de comprobación offline está en [docs/security/offline-verification.md](docs/security/offline-verification.md).
+
+## Producción
+
+Consulta [DEPLOYMENT.md](DEPLOYMENT.md) para desplegar desde GitHub privado en Coolify detrás de Tailscale
+Serve, conservar SQLite y realizar copias y restauraciones. Alfred ofrece PWA standalone y no instala un
+service worker ni almacena datos sensibles en caché offline. La prueba móvil disponible usa Chromium;
+Safari e iPhone real siguen pendientes de validación.
 
 ## Documentación
 
@@ -269,6 +295,7 @@ La guía reproducible de comprobación offline está en [docs/security/offline-v
 - [Plan incremental](docs/development/plan.md)
 - [Auditoría del entorno](docs/development/environment-audit.md)
 - [Seguridad y verificación offline](docs/security/offline-verification.md)
+- [Despliegue Docker y Coolify](DEPLOYMENT.md)
 - [Guion de demostración](docs/development/demo.md)
 - [Equipo multiagente de desarrollo](docs/development/multi-agent-workflow.md)
 
@@ -276,8 +303,8 @@ La guía reproducible de comprobación offline está en [docs/security/offline-v
 
 - La compatibilidad arquitectónica con Windows está implementada, pero todavía requiere una ejecución
   real en Windows 11 para considerarse validada.
-- Las funciones avanzadas de lenguaje natural requieren iniciar sesión con una cuenta de ChatGPT elegible;
-  sin ella Alfred conserva el modo manual y las reglas deterministas.
+- El callback OAuth de ChatGPT es loopback y no puede completarse directamente desde Safari/iPhone contra
+  la VPS. La sesión se autoriza en Alfred local y se transfiere de forma protegida siguiendo `DEPLOYMENT.md`.
 - El solver usa búsqueda heurística reproducible con 2.000 intentos; garantiza restricciones duras en
   el resultado, pero no demuestra óptimo global para aulas mayores o restricciones futuras.
 - La evaluación de intención debe pasar completa con el modelo configurado antes de una entrega.

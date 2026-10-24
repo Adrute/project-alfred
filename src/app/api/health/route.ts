@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server";
-import { getFoundationStatus } from "@/services/foundation-status";
+import { database } from "@/lib/database";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const status = await getFoundationStatus();
-    return NextResponse.json(status, {
-      status: status.database.available ? 200 : 503,
+    await database.$queryRaw`SELECT 1`;
+    return NextResponse.json({ status: "ok" }, {
+      status: 200,
       headers: { "cache-control": "no-store" },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
-        error: "invalid_configuration",
-        message: error instanceof Error ? error.message : "Configuración no válida",
+        status: "unavailable",
       },
       { status: 503 },
     );

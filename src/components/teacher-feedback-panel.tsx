@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 
 import { useState, type FormEvent } from "react";
 
@@ -15,7 +16,7 @@ export interface TeacherFeedback {
 }
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
+  const response = await apiFetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
   const body = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudo completar la operación.");
   return body;

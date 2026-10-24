@@ -18,6 +18,10 @@ expone operaciones enumeradas; nunca acepta nombres de tabla o SQL producidos po
 - Los borrados requieren confirmación reforzada y respetan relaciones y transacciones.
 - `.env`, `*.db` y el cliente generado no se versionan.
 - Seed y pruebas utilizan solo datos ficticios.
+- Las tablas `AppUser` y `AppSession` son infraestructura de acceso y no forman parte del catálogo de
+  exploración, exportación o borrado masivo del administrador de base de datos.
+- El despliegue Compose monta el directorio completo `/app/data`; backup/restauración requieren detener
+  el proceso para obtener una copia coherente. Consulta [DEPLOYMENT.md](../../DEPLOYMENT.md).
 
 ## Puntos de entrada
 

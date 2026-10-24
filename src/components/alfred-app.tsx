@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Image from "next/image";
+import { apiFetch, setSessionCsrf } from "@/lib/client-api";
+import type { AuthUser } from "@/domain/auth";
 import type { FoundationStatus } from "@/services/foundation-status";
 import type { ChatPageContext } from "@/domain/chat";
 import { PlanningView } from "@/components/planning-view";
@@ -50,6 +52,8 @@ interface ChatMessage { id: string; role: "user" | "assistant"; content: string;
 interface ConversationSummary { id: string; title: string; updatedAt: string; messages: Array<{ content: string }>; _count: { messages: number } }
 interface ContextualViewState { summary: string; studentId?: string; studentName?: string }
 interface ChatGptStatus {
+  cloudEnabled: boolean;
+  canSignInHere: boolean;
   connected: boolean;
   planEnabled: boolean;
   account: { email?: string; name?: string; picture?: string } | null;
@@ -71,13 +75,13 @@ function AlfredAvatar({ className = "", size, eager = false }: { className?: str
 }
 
 async function jsonFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
+  const response = await apiFetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
   const body = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "Error inesperado");
   return body;
 }
 
-export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }) {
+export function AlfredApp({ initialStatus, user, csrfToken }: { initialStatus: FoundationStatus; user: AuthUser; csrfToken: string }) {
   const [view, setView] = useState<View>("home");
   const [data, setData] = useState<Bootstrap | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -99,6 +103,8 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
   const [tutoringContext, setTutoringContext] = useState<ContextualViewState>({ summary: "Grupo tutor y seguimiento tutorial de la profesora." });
   const [adminContext, setAdminContext] = useState("Panel de administración y estado de los siete agentes locales.");
   const [chatGpt, setChatGpt] = useState<ChatGptStatus>({
+    cloudEnabled: false,
+    canSignInHere: false,
     connected: initialStatus.ai.connected,
     planEnabled: initialStatus.ai.planEnabled,
     account: null,
@@ -108,8 +114,9 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
 
   const refresh = async () => setData(await jsonFetch<Bootstrap>("/api/bootstrap"));
   useEffect(() => {
+    setSessionCsrf(csrfToken);
     void jsonFetch<Bootstrap>("/api/bootstrap").then(setData);
-    void jsonFetch<ChatGptStatus>("/api/auth/chatgpt").then(setChatGpt);
+    if (user.role === "admin") void jsonFetch<ChatGptStatus>("/api/auth/chatgpt").then(setChatGpt);
     void jsonFetch<{ conversation: { id: string; messages: ChatMessage[] } | null; conversations: ConversationSummary[] }>("/api/chat").then((result) => {
       setConversations(result.conversations);
       if (result.conversation) { setConversationId(result.conversation.id); setMessages(result.conversation.messages); }
@@ -119,7 +126,7 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
       if (parameters.get("chatgpt") === "error") setError(parameters.get("reason") ?? "No se pudo conectar ChatGPT.");
       if (parameters.has("chatgpt")) window.history.replaceState({}, "", window.location.pathname);
     });
-  }, []);
+  }, [csrfToken, user.role]);
 
   useEffect(() => {
     let active = true;
@@ -145,6 +152,16 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo cerrar la sesión de ChatGPT.");
     }
+  };
+
+  const signOut = async () => {
+    try {
+      const response = await apiFetch("/api/auth/session", { method: "DELETE" });
+      if (!response.ok) throw new Error("No se pudo cerrar la sesión.");
+      // Reset the whole document and its sensitive in-memory state after logout.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/login");
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo cerrar la sesión."); }
   };
 
   const filteredStudents = useMemo(() => (data?.students ?? []).filter((student) =>
@@ -256,12 +273,12 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
     <aside className="sidebar" aria-label="Navegación principal">
       <div className="sidebar-brand"><AlfredAvatar className="sidebar-brand-avatar" size={38}/><div className="sidebar-brand-copy"><strong>Alfred</strong><small>Asistente docente</small></div></div>
       <button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"} aria-expanded={!sidebarCollapsed} onClick={toggleSidebar}>{sidebarCollapsed ? "›" : "‹"}</button>
-      <nav>{nav.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined} onClick={() => setView(item.id)}><i>{item.icon}</i><span className="nav-label">{item.label}</span></button>)}</nav>
+      <nav>{nav.filter((item) => item.id !== "admin" || user.role === "admin").map((item) => <button key={item.id} className={view === item.id ? "active" : ""} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined} onClick={() => setView(item.id)}><i>{item.icon}</i><span className="nav-label">{item.label}</span></button>)}</nav>
       <div className="local-card"><span className="status-dot is-ready"/><div className="sidebar-card-copy"><strong>Datos locales</strong><small>{chatGpt.planEnabled ? "GPT activo · nombres protegidos" : "Modo manual · SQLite"}</small></div></div>
-      <div className="teacher-card"><div className="teacher-avatar">P</div><div className="sidebar-card-copy"><strong>Profesora</strong><small>Curso 2026–2027</small></div></div>
+      <div className="teacher-card"><div className="teacher-avatar">{user.displayName.slice(0, 1)}</div><div className="sidebar-card-copy"><strong>{user.displayName}</strong><small>{user.role === "admin" ? "Administración" : "Usuario"}</small></div></div>
     </aside>
     <main className="workspace">
-      <header className="workspace-header"><div><p className="eyebrow">{nav.find((item) => item.id === view)?.label}</p><h1>{view === "home" ? "Tu día" : nav.find((item) => item.id === view)?.label}</h1></div><div className="header-actions"><ChatGptControl status={chatGpt} disconnect={disconnectChatGpt}/><span>{new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</span><button onClick={() => void refresh()} aria-label="Actualizar datos">↻</button></div></header>
+      <header className="workspace-header"><div><p className="eyebrow">{nav.find((item) => item.id === view)?.label}</p><h1>{view === "home" ? "Tu día" : nav.find((item) => item.id === view)?.label}</h1></div><div className="header-actions">{user.role === "admin" && <ChatGptControl status={chatGpt} disconnect={disconnectChatGpt}/>}<button className="sign-out" onClick={() => void signOut()}>Cerrar sesión</button><span>{new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</span><button onClick={() => void refresh()} aria-label="Actualizar datos">↻</button></div></header>
       {error && <div className="error-banner">{error}<button onClick={() => setError("")}>×</button></div>}
       {view === "home" && <HomeView data={data} onNavigate={setView} onPrompt={(prompt) => void sendMessage(prompt)} />}
       {view === "chat" && <ChatView aiStatus={chatGpt} messages={messages} conversations={conversations} conversationId={conversationId} input={input} setInput={setInput} busy={busy} sendMessage={sendMessage} confirm={confirm} selectConversation={selectConversation} newConversation={() => { setMessages([]); setConversationId(undefined); setInput(""); }} />}
@@ -271,7 +288,7 @@ export function AlfredApp({ initialStatus }: { initialStatus: FoundationStatus }
       {view === "students" && <StudentsView students={filteredStudents} classrooms={data?.classrooms ?? []} selected={selectedStudent} search={studentSearch} setSearch={setStudentSearch} select={setSelectedStudentId} refresh={refresh} openTeaching={openTeachingContext} openTutor={openTutorContext} openClassroom={openClassroom} />}
       {view === "tutoring" && <TutorGroupView onPrompt={(prompt) => void sendMessage(prompt)} onContextChange={setTutoringContext} initialStudentId={tutorFocusStudentId} onOpenStudent={openStudentProfile} />}
       {view === "seating" && <SeatingView layout={data?.layout ?? null} selected={selectedSeats} setSelected={setSelectedSeats} refresh={refresh} generate={() => void sendMessage("Organiza los 25 alumnos en cinco filas de cinco")}/>}
-      {view === "admin" && <AdminView onContextChange={setAdminContext} onDataChanged={refreshAfterDatabaseChange} />}
+      {view === "admin" && user.role === "admin" && <AdminView onContextChange={setAdminContext} onDataChanged={refreshAfterDatabaseChange} />}
     </main>
     <FloatingAlfred
       open={assistantOpen}
@@ -317,7 +334,7 @@ function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSen
   return <section className="floating-alfred-panel" aria-label="Alfred, asistente contextual">
     <header>
       <AlfredAvatar size={48}/>
-      <div><strong>Alfred</strong><small><span/> {aiStatus.planEnabled ? "Usando tu plan de ChatGPT" : "Modo manual"}</small></div>
+      <div><strong>Alfred</strong><small><span/> {aiStatus.planEnabled ? "Usando tu plan de ChatGPT" : "ChatGPT sin conectar"}</small></div>
       <div className="floating-alfred-actions"><button onClick={onNewConversation} aria-label="Nueva conversación">＋</button><button onClick={() => setOpen(false)} aria-label="Cerrar Alfred">×</button></div>
     </header>
     <button className="floating-context" onClick={onOpenChat} title="Abrir el chat completo"><span>Viendo</span><strong>{context.label}</strong><i>↗</i></button>
@@ -337,7 +354,20 @@ function FloatingAlfred({ open, setOpen, context, messages, busy, confirm, onSen
 }
 
 function ChatGptControl({ status, disconnect }: { status: ChatGptStatus; disconnect: () => Promise<void> }) {
-  if (!status.planEnabled) return <a className="chatgpt-connect" href="/api/auth/chatgpt/start"><span>✦</span> Continuar con ChatGPT</a>;
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function connect() {
+    setBusy(true); setError("");
+    try {
+      const response = await apiFetch("/api/auth/chatgpt/start", { method: "POST" });
+      const result = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !result.url) throw new Error(result.error ?? "No se pudo iniciar la conexión.");
+      window.location.assign(result.url);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo iniciar la conexión."); setBusy(false); }
+  }
+  if (!status.cloudEnabled) return <span className="cloud-disabled" title={status.detail}>IA externa desactivada</span>;
+  if (!status.planEnabled && !status.canSignInHere) return <span className="cloud-disabled" title={status.detail}>ChatGPT pendiente de activar</span>;
+  if (!status.planEnabled) return <div><button className="chatgpt-connect" disabled={busy} onClick={() => void connect()}>Continuar con ChatGPT</button>{error && <span role="alert">{error}</span>}</div>;
   return <div className="chatgpt-connected" title={status.detail}><span>✦</span><div><strong>ChatGPT activo</strong><small>{status.account?.email ?? status.model ?? "Plan conectado"}</small></div><button onClick={() => void disconnect()} title="Desconectar ChatGPT">×</button></div>;
 }
 
@@ -444,7 +474,7 @@ function ChatView({ aiStatus, messages, conversations, conversationId, input, se
     {messages.length === 0 && <div className="chat-empty"><AlfredAvatar className="orb small empty-avatar" size={56}/><h2>Hola, soy Alfred</h2><p>Puedo recordar observaciones, preparar tutorías y organizar tu aula.</p></div>}
     {messages.map((message) => <div className={`chat-row ${message.role}`} key={message.id}>{message.role === "assistant" && <AlfredAvatar className="mini-avatar" size={30}/>}<div className="chat-bubble">{message.role === "assistant" && <small className="agent-label">Alfred</small>}{message.role === "assistant" ? <MarkdownMessage content={message.content}/> : <div className="message-text">{message.content}</div>}{message.pending && <div className={`confirmation-card ${message.pending.confirmed ? "done" : ""}`}><div><strong>{message.pending.confirmed ? "Acción confirmada" : "Pendiente de confirmación"}</strong><small>{message.pending.operation.replaceAll("_", " ")}</small></div>{message.pending.confirmed ? <span>✓ Guardado</span> : <button disabled={busy} onClick={() => void confirm(message.id, message.pending!)}>Confirmar y guardar</button>}</div>}</div></div>)}
     {busy && <div className="chat-row assistant"><AlfredAvatar className="mini-avatar" size={30}/><div className="typing"><i/><i/><i/></div></div>}
-  </section><div className="chat-bottom"><div className="prompt-chips">{["¿Qué sabes de Lucas?", "Observaciones de esta semana", "Organiza los asientos"].map((prompt) => <button disabled={busy} onClick={() => void sendMessage(prompt)} key={prompt}>{prompt}</button>)}</div><form className="chat-composer" onSubmit={submit}><textarea disabled={busy} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} placeholder="Escribe a Alfred…"/><button disabled={busy || !input.trim()}>↑</button></form><small>{aiStatus.planEnabled ? `Usando ChatGPT${aiStatus.model ? ` · ${aiStatus.model}` : ""} · los nombres se sustituyen antes de salir del equipo.` : "Modo manual · conecta ChatGPT para activar razonamientos avanzados."} Revisa siempre las propuestas antes de confirmarlas.</small></div></div></div>;
+  </section><div className="chat-bottom"><div className="prompt-chips">{["¿Qué sabes de Lucas?", "Observaciones de esta semana", "Organiza los asientos"].map((prompt) => <button disabled={busy} onClick={() => void sendMessage(prompt)} key={prompt}>{prompt}</button>)}</div><form className="chat-composer" onSubmit={submit}><textarea disabled={busy} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} placeholder="Escribe a Alfred…"/><button disabled={busy || !input.trim()}>↑</button></form><small>{aiStatus.planEnabled ? `Usando ChatGPT${aiStatus.model ? ` · ${aiStatus.model}` : ""} · los nombres se sustituyen antes de salir del equipo.` : "Modo manual · IA externa desconectada."} Revisa siempre las propuestas antes de confirmarlas.</small></div></div></div>;
 }
 
 function ClassesView({ data, refresh, selectedId, select, openStudent }: { data: Bootstrap | null; refresh: () => Promise<void>; selectedId?: string; select: (id?: string) => void; openStudent: (id: string) => void }) {

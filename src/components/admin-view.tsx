@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -41,14 +42,14 @@ interface CloudAiLogDashboard {
 interface ExportDataset { id: string; title: string; description: string; includesPersonalData: boolean }
 
 async function getAgents(): Promise<AgentInfo[]> {
-  const response = await fetch("/api/admin/agents", { cache: "no-store" });
+  const response = await apiFetch("/api/admin/agents", { cache: "no-store" });
   const body = await response.json() as AgentInfo[] & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudieron cargar los agentes.");
   return body;
 }
 
 async function getAiModels(): Promise<AiModelCatalog> {
-  const response = await fetch("/api/admin/ai-models", { cache: "no-store" });
+  const response = await apiFetch("/api/admin/ai-models", { cache: "no-store" });
   const body = await response.json() as AiModelCatalog & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudo cargar el catálogo de modelos.");
   return body;
@@ -77,7 +78,7 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
       : section === "database"
       ? "Administrador local de la base de datos: tablas, registros y herramientas de borrado seguro."
       : section === "logs"
-      ? "Logs auditables de las peticiones seudonimizadas enviadas a ChatGPT y sus respuestas observables."
+      ? "Metadatos de actividad de ChatGPT: estado, modelo, duración y uso; sin cuerpos de peticiones ni respuestas."
       : section === "a2a"
       ? "Trazabilidad de conversaciones A2A entre Alfred y los agentes especializados, con solicitudes y respuestas estructuradas."
       : selected
@@ -88,7 +89,7 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
   const control = async (agentId: string, action: "start" | "stop" | "restart") => {
     setBusyId(agentId); setError("");
     try {
-      const response = await fetch(`/api/admin/agents/${agentId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
+      const response = await apiFetch(`/api/admin/agents/${agentId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
       const body = await response.json() as { agents?: AgentInfo[]; error?: string };
       if (!response.ok || !body.agents) throw new Error(body.error ?? "No se pudo controlar el agente.");
       setAgents(body.agents);
@@ -99,7 +100,7 @@ export function AdminView({ onContextChange, onDataChanged }: { onContextChange?
   const configureModel = async (agentId: string, model: string) => {
     setBusyId(agentId); setError("");
     try {
-      const response = await fetch(`/api/admin/agents/${agentId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: model || null }) });
+      const response = await apiFetch(`/api/admin/agents/${agentId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: model || null }) });
       const body = await response.json() as { agents?: AgentInfo[]; error?: string };
       if (!response.ok || !body.agents) throw new Error(body.error ?? "No se pudo configurar el modelo.");
       setAgents(body.agents);
@@ -149,7 +150,7 @@ function prettyJson(value: unknown) {
 
 async function getCloudAiLogs(filters: { query: string; status: string; model: string; operation: string; range: string }) {
   const parameters = new URLSearchParams({ ...filters, limit: "100" });
-  const response = await fetch(`/api/admin/logs?${parameters}`, { cache: "no-store" });
+  const response = await apiFetch(`/api/admin/logs?${parameters}`, { cache: "no-store" });
   const body = await response.json() as CloudAiLogDashboard & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudieron cargar los logs de ChatGPT.");
   return body;
@@ -199,7 +200,7 @@ function LogsAdmin() {
     if (confirmation !== "BORRAR LOGS") return;
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/admin/logs", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation }) });
+      const response = await apiFetch("/api/admin/logs", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation }) });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error ?? "No se pudieron borrar los logs.");
       setShowDelete(false); setConfirmation(""); setSelectedId(undefined);
@@ -258,7 +259,7 @@ function A2AAdmin() {
   const load = async () => {
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/admin/a2a", { cache: "no-store" });
+      const response = await apiFetch("/api/admin/a2a", { cache: "no-store" });
       const body = await response.json() as A2AHistory & { error?: string };
       if (!response.ok) throw new Error(body.error ?? "No se pudo cargar la actividad A2A.");
       setData(body); setSelectedId((current) => current ?? body.conversations[0]?.id);
@@ -267,7 +268,7 @@ function A2AAdmin() {
   };
   useEffect(() => {
     let active = true;
-    void fetch("/api/admin/a2a", { cache: "no-store" })
+    void apiFetch("/api/admin/a2a", { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json() as A2AHistory & { error?: string };
         if (!response.ok) throw new Error(body.error ?? "No se pudo cargar la actividad A2A.");
@@ -303,7 +304,7 @@ function ExportAdmin() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/admin/exports", { cache: "no-store" })
+    void apiFetch("/api/admin/exports", { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json() as { datasets?: ExportDataset[]; error?: string };
         if (!response.ok || !body.datasets) throw new Error(body.error ?? "No se pudo cargar el catálogo de exportación.");
@@ -332,7 +333,7 @@ function ExportAdmin() {
     if (!selected.length) return;
     setBusy(true); setError(""); setSuccess("");
     try {
-      const response = await fetch("/api/admin/exports", {
+      const response = await apiFetch("/api/admin/exports", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ datasets: selected, format }),
@@ -376,7 +377,7 @@ type DeleteRequest =
   | { kind: "record"; table: string; id: string; label: string; confirmation: string };
 
 async function getDatabase(table: string): Promise<DatabaseOverview> {
-  const response = await fetch(`/api/admin/database?table=${encodeURIComponent(table)}`, { cache: "no-store" });
+  const response = await apiFetch(`/api/admin/database?table=${encodeURIComponent(table)}`, { cache: "no-store" });
   const body = await response.json() as DatabaseOverview & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudo consultar la base de datos.");
   return body;
@@ -407,11 +408,11 @@ function DatabaseAdmin({ onDataChanged }: { onDataChanged: () => Promise<void> }
     setBusy(true); setError("");
     try {
       if (deleteRequest.kind === "scope") {
-        const response = await fetch("/api/admin/database/clear", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scope: deleteRequest.scope.key, confirmation }) });
+        const response = await apiFetch("/api/admin/database/clear", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scope: deleteRequest.scope.key, confirmation }) });
         const body = await response.json() as { error?: string };
         if (!response.ok) throw new Error(body.error ?? "No se pudo borrar la información.");
       } else {
-        const response = await fetch(`/api/admin/database/${encodeURIComponent(deleteRequest.table)}/${encodeURIComponent(deleteRequest.id)}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation }) });
+        const response = await apiFetch(`/api/admin/database/${encodeURIComponent(deleteRequest.table)}/${encodeURIComponent(deleteRequest.id)}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation }) });
         const body = await response.json() as { error?: string };
         if (!response.ok) throw new Error(body.error ?? "No se pudo borrar el registro.");
       }

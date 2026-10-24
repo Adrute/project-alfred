@@ -3,8 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 600_000,
-  // Local inference on CPU/GPU can need more than a UI-only assertion while
-  // Ollama performs a tool call and Alfred renders the persisted response.
+  // Keep generous timing for complete UI flows and slower CI hosts.
   expect: { timeout: 150_000 },
   fullyParallel: false,
   workers: 1,
@@ -14,7 +13,10 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", testIgnore: /mobile\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-chromium", testMatch: /mobile\.spec\.ts/, use: { ...devices["iPhone 15"], defaultBrowserType: "chromium" } },
+  ],
   webServer: {
     command: "node --import tsx scripts/start-e2e-server.ts",
     url: "http://127.0.0.1:3100/api/health",

@@ -1,8 +1,9 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { databaseTableKeySchema, deleteDatabaseRecordInputSchema } from "@/domain/database-admin";
 import { removeManagedRecord } from "@/services/database-admin-service";
 
-export async function DELETE(request: Request, context: { params: Promise<{ table: string; id: string }> }) {
+async function handleDELETE(request: Request, context: { params: Promise<{ table: string; id: string }> }) {
   try {
     const params = await context.params;
     const table = databaseTableKeySchema.parse(params.table);
@@ -12,3 +13,5 @@ export async function DELETE(request: Request, context: { params: Promise<{ tabl
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo borrar el registro." }, { status: 400 });
   }
 }
+
+export const DELETE = withApiAuth(handleDELETE, "admin");

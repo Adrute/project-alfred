@@ -565,7 +565,7 @@ describe("observation confirmation flow", () => {
     }));
   });
 
-  it("stores searchable pseudonymized ChatGPT request logs and their observable response", async () => {
+  it("stores searchable ChatGPT usage metadata without request or response content", async () => {
     const conversation = await databaseModule.database.conversation.create({ data: { title: "Auditoría" } });
     const startedAt = new Date();
     const traceId = await cloudAiLogModule.cloudAiTraceSink.start({
@@ -586,10 +586,12 @@ describe("observation confirmation flow", () => {
       durationMs: 120,
       finishedAt: new Date(),
     });
-    const dashboard = await cloudAiLogModule.getCloudAiLogDashboard({ query: "ABCDEF1234", status: "all", model: "all", operation: "all", range: "all", limit: 100 });
+    const dashboard = await cloudAiLogModule.getCloudAiLogDashboard({ query: "alfred_chat", status: "all", model: "all", operation: "all", range: "all", limit: 100 });
     expect(dashboard.summary.total).toBe(1);
     expect(dashboard.logs[0]).toEqual(expect.objectContaining({ status: "completed", requestId: "req_test", agentId: "alfred-orchestrator", totalTokens: 15, studentAliasCount: 1 }));
-    expect(JSON.stringify(dashboard.logs[0])).toContain("ALUMNO_ABCDEF1234");
+    expect(JSON.stringify(dashboard.logs[0])).not.toContain("ALUMNO_ABCDEF1234");
+    expect(dashboard.logs[0].requestBody).toBeNull();
+    expect(dashboard.logs[0].responseBody).toBeNull();
     expect(JSON.stringify(dashboard.logs[0])).not.toMatch(/Lucas|Elena|Marcos|Pablo/);
 
     const alfred = (await agentAdminModule.getAgentDashboard()).find((agent) => agent.id === "alfred-orchestrator");

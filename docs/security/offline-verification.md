@@ -2,7 +2,8 @@
 
 ## Modelo de protección local
 
-Alfred enlaza solo `127.0.0.1`. No se incluyen telemetría, CDNs ni analítica. ChatGPT es opcional y la
+Alfred enlaza solo `127.0.0.1` en local; el contenedor enlaza `0.0.0.0` dentro del bridge y Docker publica
+solo el loopback del host. No se incluyen telemetría, CDNs ni analítica. ChatGPT es opcional y la
 única integración cloud autorizada; sin iniciar sesión no se realizan llamadas de inferencia. Esto
 reduce exposición, pero no implica por sí mismo cumplimiento
 del RGPD. Antes de tratar datos reales hacen falta revisión de seguridad, protección de datos,
@@ -58,12 +59,12 @@ cualquier conexión remota antes de usar la aplicación con datos, incluso ficti
 
 ## Comprobaciones automatizadas actuales
 
-- La configuración rechaza un `HOST` distinto de `127.0.0.1`.
+- La configuración acepta `127.0.0.1` en local y `0.0.0.0` exclusivamente para el bind interno de Docker.
 - Las pruebas solo permiten endpoints externos de `auth.openai.com` y `api.openai.com` en los módulos
   de OAuth y Responses.
 - La seudonimización tiene regresiones para nombres, identificadores, correos, teléfonos y estabilidad
   de alias por conversación.
-- **Administración → Logs** permite verificar el cuerpo seudonimizado realmente enviado a ChatGPT. Los
+- **Administración → Logs** permite verificar los metadatos de uso sin exponer cuerpos. Los
   registros se crean antes de la conexión, permanecen solo en SQLite y excluyen credenciales y razonamiento.
 - `npm audit --omit=dev` no reportó vulnerabilidades conocidas en dependencias de producción durante
   la creación de la Fase 1.

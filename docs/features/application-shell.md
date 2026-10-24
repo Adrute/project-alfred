@@ -2,12 +2,14 @@
 
 ## Alcance
 
-Estructura global de Alfred, menú lateral, navegación entre vistas, cabecera, comportamiento responsive y
-persistencia de preferencias puramente visuales.
+Estructura global de Alfred, acceso tras autenticación, menú lateral, navegación entre vistas, cabecera,
+comportamiento responsive y persistencia de preferencias puramente visuales.
 
 ## Flujo actual
 
-`alfred-app.tsx` mantiene la vista activa y presenta el menú en todas las pantallas. En escritorio, la
+La ruta de inicio exige una sesión local y ofrece la página de acceso cuando no hay cuenta activa.
+`alfred-app.tsx` mantiene la vista activa y presenta opciones según el rol; Administración solo se
+muestra a `admin`. En escritorio, la
 profesora puede colapsarlo a una barra de iconos o volver a expandirlo; la preferencia se conserva en
 `localStorage`. En móvil se mantiene la navegación horizontal completa para no ocultar etiquetas.
 
@@ -17,6 +19,8 @@ profesora puede colapsarlo a una barra de iconos o volver a expandirlo; la prefe
 - Cada icono conserva nombre accesible y ayuda emergente cuando la etiqueta no está visible.
 - El asistente flotante permanece disponible y no debe quedar cubierto por la navegación.
 - Las preferencias de interfaz no se guardan en SQLite ni se envían fuera del navegador.
+- La PWA se declara standalone y no registra service worker ni conserva datos docentes para uso offline.
+- El layout contempla safe areas y viewport dinámico; la verificación en Safari/iPhone real sigue pendiente.
 
 ## Puntos de entrada
 

@@ -35,9 +35,6 @@ function whereFor(filters: CloudAiLogFilters): Prisma.CloudAiTraceWhereInput {
       { model: { contains: filters.query } },
       { requestId: { contains: filters.query } },
       { responseId: { contains: filters.query } },
-      { requestBodyJson: { contains: filters.query } },
-      { responseBodyJson: { contains: filters.query } },
-      { errorMessage: { contains: filters.query } },
     ];
   }
   return where;

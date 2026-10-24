@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { weightedGradeAverage } from "@/domain/teaching";
@@ -23,7 +24,7 @@ const timeLabel = (minutes: number) => `${String(Math.floor(minutes / 60)).padSt
 const todayKey = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
+  const response = await apiFetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
   const body = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudo completar la operación.");
   return body;

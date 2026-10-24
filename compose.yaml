@@ -1,0 +1,52 @@
+services:
+  alfred:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_ORIGIN: ${APP_ORIGIN:?}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      HOST: 0.0.0.0
+      PORT: "3000"
+      APP_ORIGIN: ${APP_ORIGIN:?}
+      DATABASE_URL: file:/app/data/alfred.db
+      DATA_DIRECTORY: /app/data
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CLOUD_AI_ENABLED: ${CLOUD_AI_ENABLED:-true}
+      CHATGPT_MODEL: ${CHATGPT_MODEL:-gpt-6.1-sol}
+    volumes:
+      - alfred-data:/app/data
+    ports:
+      - "127.0.0.1:${ALFRED_HOST_PORT:-13000}:3000"
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    cpus: 1.0
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  alfred-data:
+    name: ${ALFRED_DATA_VOLUME:-alfred-production-data}
+
+networks:
+  default:
+    driver: bridge

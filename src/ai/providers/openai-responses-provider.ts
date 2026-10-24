@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireCloudAi } from "@/lib/cloud-policy";
 import type { CloudAiTraceContext, CloudAiTraceSink } from "@/ai/cloud-ai-trace";
 import {
   LlmUnavailableError,
@@ -20,6 +21,7 @@ interface OpenAiResponsesProviderOptions {
   fetchImplementation?: typeof fetch;
   traceContext?: CloudAiTraceContext;
   traceSink?: CloudAiTraceSink;
+  requestGuard: (body: Record<string, unknown>) => Promise<void>;
 }
 
 type ResponseInput =
@@ -43,6 +45,7 @@ export class OpenAiResponsesProvider implements LlmProvider {
   private readonly requestFetch: typeof fetch;
   private readonly traceContext: CloudAiTraceContext;
   private readonly traceSink?: CloudAiTraceSink;
+  private readonly requestGuard: (body: Record<string, unknown>) => Promise<void>;
 
   constructor(options: OpenAiResponsesProviderOptions) {
     this.accessToken = options.accessToken;
@@ -51,6 +54,7 @@ export class OpenAiResponsesProvider implements LlmProvider {
     this.requestFetch = options.fetchImplementation ?? fetch;
     this.traceContext = options.traceContext ?? {};
     this.traceSink = options.traceSink;
+    this.requestGuard = options.requestGuard;
   }
 
   async generate(prompt: string, options: GenerationOptions = {}): Promise<LlmResponse> {
@@ -143,6 +147,12 @@ export class OpenAiResponsesProvider implements LlmProvider {
   }
 
   private async request(body: Record<string, unknown>, externalSignal?: AbortSignal): Promise<StreamResult> {
+    requireCloudAi();
+    try {
+      await this.requestGuard(body);
+    } catch (error) {
+      throw new LlmUnavailableError("La petición a ChatGPT fue bloqueada para proteger la identidad del alumnado.", { cause: error });
+    }
     const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSignal]) : timeoutSignal;
     const startedAt = new Date();

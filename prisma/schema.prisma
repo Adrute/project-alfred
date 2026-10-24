@@ -7,6 +7,33 @@ datasource db {
   provider = "sqlite"
 }
 
+/// Local application identity. Teaching data remains shared between users.
+model AppUser {
+  id           String       @id @default(cuid())
+  username     String       @unique
+  displayName  String
+  passwordHash String
+  role         String       @default("user")
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  sessions     AppSession[]
+}
+
+/// Only a one-way hash of the random browser session token is persisted.
+model AppSession {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
 model Classroom {
   id                  String               @id @default(cuid())
   name                String

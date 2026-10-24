@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { database } from "@/lib/database";
+import { requireAdminContext } from "@/lib/api-security";
 import { pendingActionPayloadSchema, type PendingActionPayload } from "@/domain/actions";
 import { agentDefinitions } from "@/agents/definitions";
 import { addDays, dateFromKey, hasTimeOverlap, minuteLabel } from "@/domain/planning";
@@ -27,6 +28,7 @@ export async function confirmAction(actionId: string) {
   const proposal = await database.pendingAction.findUnique({ where: { id: actionId } });
   if (!proposal) throw new Error("No existe la propuesta solicitada.");
   const proposedPayload = pendingActionPayloadSchema.parse(JSON.parse(proposal.payload));
+  if (proposedPayload.type === "control_agent") requireAdminContext();
   if (proposedPayload.type === "plan_week" && proposal.status === "pending") {
     await generateWeekSessions(proposedPayload.weekStart);
   }

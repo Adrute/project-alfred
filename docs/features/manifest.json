@@ -2,6 +2,13 @@
   "version": 1,
   "features": [
     {
+      "id": "production-access-deployment",
+      "title": "Acceso, PWA y despliegue privado",
+      "doc": "docs/features/production-access-deployment.md",
+      "keywords": ["autenticación", "sesión", "roles", "csrf", "docker", "coolify", "pwa", "producción"],
+      "entryPoints": ["src/services/auth-service.ts", "src/app/api/auth/session/route.ts", "src/lib/api-security.ts", "compose.yaml", "Dockerfile", "src/app/manifest.ts"]
+    },
+    {
       "id": "application-shell",
       "title": "Navegación y estructura de la aplicación",
       "doc": "docs/features/application-shell.md",
@@ -62,7 +69,7 @@
       "title": "ChatGPT, privacidad y logs",
       "doc": "docs/features/cloud-ai-privacy-logs.md",
       "keywords": ["chatgpt", "openai", "privacidad", "seudónimo", "log", "modelo"],
-      "entryPoints": ["src/ai/providers/openai-responses-provider.ts", "src/services/chatgpt-auth-service.ts", "src/services/student-pseudonymization-service.ts", "src/services/cloud-ai-log-service.ts"]
+      "entryPoints": ["src/ai/providers/openai-responses-provider.ts", "src/services/chatgpt-auth-service.ts", "src/app/auth/callback/route.ts", "scripts/manage-chatgpt-credentials.ts", "src/services/student-pseudonymization-service.ts", "src/services/cloud-ai-log-service.ts"]
     },
     {
       "id": "database-administration",

@@ -10,6 +10,8 @@ modelos generativos, consumo de tokens e historial de mensajes A2A internos y ex
 `admin-view.tsx` consulta las rutas `/api/admin/agents` y `/api/admin/a2a`. Los controles actualizan
 `AgentRuntime`; el enrutado rechaza agentes detenidos. `internal-a2a-service.ts` registra delegaciones
 tipadas entre módulos. `a2a-service.ts` expone la frontera A2A 1.0 local sin convertir agentes en procesos.
+El panel y sus API requieren una sesión `admin`; también requieren ese rol la Agent Card y el endpoint A2A
+externo. Los usuarios ordinarios no reciben enlaces a Administración en la navegación.
 
 ## Fuente de verdad e invariantes
 
@@ -17,7 +19,10 @@ tipadas entre módulos. `a2a-service.ts` expone la frontera A2A 1.0 local sin co
 - `AgentExecution` contiene métricas, no razonamiento interno.
 - `AgentConversation` y `AgentMessage` conservan solicitudes y respuestas estructuradas observables.
 - Las métricas de tokens se agregan desde `CloudAiTrace`; nunca leen el contenido de la petición.
-- Todas las interfaces permanecen en loopback y A2A no evita la confirmación humana.
+- En local las rutas escuchan en loopback; en Docker el bind es interno al bridge, el puerto del host se
+  publica solo en loopback y el acceso remoto requiere Tailscale Serve y autenticación admin.
+- A2A no evita la confirmación humana.
+- La integración A2A está protegida por autenticación de Alfred; no se admite acceso anónimo en despliegue.
 - No confundir estos agentes con el equipo de desarrollo de `.agents/`.
 
 ## Puntos de entrada

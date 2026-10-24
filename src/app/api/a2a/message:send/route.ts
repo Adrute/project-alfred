@@ -1,3 +1,4 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { A2A_MEDIA_TYPE, A2A_PROTOCOL_VERSION } from "@/agents/a2a/contracts";
@@ -15,7 +16,7 @@ function problem(detail: string, status: number, extras: Record<string, unknown>
   }, { status, headers: { "content-type": "application/problem+json" } });
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const requestedVersion = request.headers.get("a2a-version");
   if (requestedVersion && requestedVersion !== A2A_PROTOCOL_VERSION && requestedVersion !== "1.0.0") {
     return problem(`La versión A2A ${requestedVersion} no está soportada.`, 400, {
@@ -32,3 +33,5 @@ export async function POST(request: Request) {
     return problem(error instanceof Error ? error.message : "No se pudo procesar el mensaje A2A.", 400);
   }
 }
+
+export const POST = withApiAuth(handlePOST, "admin");

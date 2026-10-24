@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { StudentPseudonymizer } from "@/services/student-pseudonymization-service";
+import { assertNoStudentIdentityInCloudPayload, StudentPseudonymizer } from "@/services/student-pseudonymization-service";
 
 const students = [
   { id: "student-alicia", firstName: "Alicia", lastName: "Ríos" },
@@ -21,7 +21,7 @@ describe("StudentPseudonymizer", () => {
     expect(serialized).not.toContain("student-alicia");
     expect(serialized).not.toContain("Teo");
     expect(serialized).toContain("alergia a los frutos secos");
-    expect(serialized).toMatch(/ALUMNO_[A-F0-9]{10}/);
+    expect(serialized).toMatch(/ALUMNO_[A-F0-9]{64}/);
     expect(privacy.depseudonymize(cloudValue)).toEqual({
       message: "Alicia Ríos tiene alergia a los frutos secos.",
       studentId: "Alicia Ríos",
@@ -42,5 +42,17 @@ describe("StudentPseudonymizer", () => {
     const privacy = new StudentPseudonymizer(students, "conversation-1", "a-secure-local-secret-with-enough-length");
     expect(privacy.pseudonymizeText("Escribe a familia@example.com o llama al 612 345 678"))
       .toBe("Escribe a DATO_CONTACTO o llama al DATO_CONTACTO");
+  });
+
+  it("blocks any real student identity at the final cloud boundary", () => {
+    expect(() => assertNoStudentIdentityInCloudPayload(students, { input: "Resume la ficha de Alicia Ríos" })).toThrow(/bloqueada/);
+    expect(() => assertNoStudentIdentityInCloudPayload(students, { input: "El identificador es student-teo" })).toThrow(/bloqueada/);
+    expect(() => assertNoStudentIdentityInCloudPayload(students, { input: "ALUMNO_0123456789ABCDEF" })).not.toThrow();
+  });
+
+  it("normalizes Unicode before removing names", () => {
+    const privacy = new StudentPseudonymizer(students, "conversation-1", "a-secure-local-secret-with-enough-length");
+    const decomposedName = "Alicia Ri\u0301os";
+    expect(privacy.pseudonymizeText(decomposedName)).toMatch(/^ALUMNO_[A-F0-9]{64}$/);
   });
 });

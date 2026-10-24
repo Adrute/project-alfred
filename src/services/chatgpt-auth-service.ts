@@ -1,8 +1,10 @@
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 import { z } from "zod";
 import { loadConfig } from "@/config/env";
+import { requireCloudAi } from "@/lib/cloud-policy";
 
 const AUTHORIZATION_ENDPOINT = "https://auth.openai.com/api/accounts/authorize";
 const TOKEN_ENDPOINT = "https://auth.openai.com/api/accounts/oauth/token";
@@ -43,6 +45,12 @@ const authStoreSchema = z.object({
   aliasSecret: z.string().min(32),
   registration: registrationSchema.nullable().default(null),
   pending: pendingSchema.nullable().default(null),
+});
+
+const transferableCredentialsSchema = z.object({
+  version: z.literal(1),
+  kind: z.literal("alfred-chatgpt-credentials"),
+  registration: registrationSchema,
 });
 
 const tokenResponseSchema = z.object({
@@ -89,6 +97,8 @@ type AuthStore = z.infer<typeof authStoreSchema>;
 type Registration = z.infer<typeof registrationSchema>;
 
 export interface ChatGptConnectionStatus {
+  cloudEnabled: boolean;
+  canSignInHere: boolean;
   connected: boolean;
   planEnabled: boolean;
   account: { email?: string; name?: string; picture?: string } | null;
@@ -104,7 +114,69 @@ export interface ChatGptModelOption {
 function authPaths() {
   const config = loadConfig();
   const directory = path.resolve(config.DATA_DIRECTORY, "auth");
-  return { directory, file: path.join(directory, "chatgpt.json") };
+  return {
+    directory,
+    file: path.join(directory, "chatgpt.json"),
+    lock: path.join(directory, "chatgpt.lock"),
+    recoveryLock: path.join(directory, "chatgpt.lock.recovery"),
+  };
+}
+
+async function withAuthStoreLock<T>(operation: () => Promise<T>): Promise<T> {
+  const { directory, lock, recoveryLock } = authPaths();
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  let handle;
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    try {
+      await stat(recoveryLock);
+      await delay(50);
+      continue;
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+    }
+    try {
+      handle = await open(lock, "wx", 0o600);
+      break;
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+      let recoveryHandle;
+      try {
+        recoveryHandle = await open(recoveryLock, "wx", 0o600);
+        try {
+          const metadata = await stat(lock);
+          if (Date.now() - metadata.mtimeMs > 45_000) await unlink(lock);
+        } catch (lockError) {
+          if (!(lockError instanceof Error) || !("code" in lockError) || lockError.code !== "ENOENT") throw lockError;
+        }
+      } catch (recoveryError) {
+        if (!(recoveryError instanceof Error) || !("code" in recoveryError) || recoveryError.code !== "EEXIST") throw recoveryError;
+      } finally {
+        if (recoveryHandle) {
+          await recoveryHandle.close();
+          await unlink(recoveryLock).catch(() => undefined);
+        }
+      }
+      await delay(50);
+    }
+  }
+  if (!handle) throw new Error("El almacén de ChatGPT está ocupado. Inténtalo de nuevo.");
+  try {
+    return await operation();
+  } finally {
+    await handle.close();
+    await unlink(lock).catch(() => undefined);
+  }
+}
+
+export async function clearOrphanedChatGptLocks() {
+  const { lock, recoveryLock } = authPaths();
+  for (const file of [lock, recoveryLock]) {
+    try {
+      await unlink(file);
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+    }
+  }
 }
 
 async function persistStore(store: AuthStore) {
@@ -141,10 +213,19 @@ function randomUrlSafe(bytes = 32) {
 }
 
 function callbackUri() {
-  return `http://127.0.0.1:${loadConfig().PORT}/api/auth/chatgpt/callback`;
+  return `http://127.0.0.1:${loadConfig().PORT}/auth/callback`;
+}
+
+function canAuthorizeOnThisHost() {
+  const config = loadConfig();
+  return config.APP_ORIGIN === `http://127.0.0.1:${config.PORT}`;
 }
 
 export async function beginChatGptSignIn() {
+  requireCloudAi();
+  if (!canAuthorizeOnThisHost()) {
+    throw new Error("El acceso a ChatGPT debe autorizarse en Alfred ejecutado localmente y transferirse después a esta instancia.");
+  }
   const store = await readStore();
   const state = randomUrlSafe();
   const nonce = randomUrlSafe();
@@ -257,6 +338,7 @@ async function selectModel(accessToken: string) {
 }
 
 export async function completeChatGptSignIn(parameters: URLSearchParams) {
+  requireCloudAi();
   const store = await readStore();
   const pending = store.pending;
   if (!pending) throw new Error("No hay ningún inicio de sesión pendiente.");
@@ -319,43 +401,51 @@ async function refreshRegistration(store: AuthStore): Promise<Registration | nul
   const registration = store.registration;
   if (!registration?.accessToken || !registration.expiresAt) return null;
   if (Date.parse(registration.expiresAt) - Date.now() > 60_000) return registration;
-  if (!registration.refreshToken) return null;
-  if (registration.earliestRefreshAt && Date.parse(registration.earliestRefreshAt) > Date.now() && Date.parse(registration.expiresAt) > Date.now()) return registration;
-  const response = await fetch(TOKEN_ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      client_id: registration.clientId,
-      refresh_token: registration.refreshToken,
-      resource: RESOURCE,
-    }),
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    if (response.status === 400 || response.status === 401) {
-      store.registration = registrationSchema.parse({ ...registration, accessToken: undefined, refreshToken: undefined, idToken: undefined, scopes: [] });
-      await persistStore(store);
+  return withAuthStoreLock(async () => {
+    const latest = await readStore();
+    const current = latest.registration;
+    if (!current?.accessToken || !current.expiresAt) return null;
+    if (Date.parse(current.expiresAt) - Date.now() > 60_000) return current;
+    if (!current.refreshToken) return null;
+    if (current.earliestRefreshAt && Date.parse(current.earliestRefreshAt) > Date.now() && Date.parse(current.expiresAt) > Date.now()) return current;
+    const response = await fetch(TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: current.clientId,
+        refresh_token: current.refreshToken,
+        resource: RESOURCE,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 401) {
+        latest.registration = registrationSchema.parse({ ...current, accessToken: undefined, refreshToken: undefined, idToken: undefined, scopes: [] });
+        await persistStore(latest);
+      }
+      return null;
     }
-    return null;
-  }
-  const tokens = tokenResponseSchema.parse(await response.json());
-  const refreshed = registrationSchema.parse({
-    ...registration,
-    idToken: tokens.id_token,
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token ?? registration.refreshToken,
-    tokenType: tokens.token_type,
-    expiresAt: new Date(Date.now() + tokens.expires_in * 1_000).toISOString(),
-    earliestRefreshAt: parseEarliestRefresh(tokens.earliest_refresh_at),
-    scopes: tokens.scope.split(/\s+/).filter(Boolean),
+    const tokens = tokenResponseSchema.parse(await response.json());
+    const refreshed = registrationSchema.parse({
+      ...current,
+      idToken: tokens.id_token,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? current.refreshToken,
+      tokenType: tokens.token_type,
+      expiresAt: new Date(Date.now() + tokens.expires_in * 1_000).toISOString(),
+      earliestRefreshAt: parseEarliestRefresh(tokens.earliest_refresh_at),
+      scopes: tokens.scope.split(/\s+/).filter(Boolean),
+    });
+    latest.registration = refreshed;
+    await persistStore(latest);
+    return refreshed;
   });
-  store.registration = refreshed;
-  await persistStore(store);
-  return refreshed;
 }
 
 export async function getChatGptSession() {
+  if (!loadConfig().CLOUD_AI_ENABLED) return null;
   const store = await readStore();
   if (!refreshInFlight) refreshInFlight = refreshRegistration(store).finally(() => { refreshInFlight = null; });
   let registration: Registration | null;
@@ -369,10 +459,15 @@ export async function getChatGptSession() {
 }
 
 export async function getChatGptStatus(): Promise<ChatGptConnectionStatus> {
+  const config = loadConfig();
+  const canSignInHere = canAuthorizeOnThisHost();
+  if (!config.CLOUD_AI_ENABLED) return { cloudEnabled: false, canSignInHere, connected: false, planEnabled: false, account: null, model: null, detail: "ChatGPT está desactivado mediante la configuración de emergencia." };
   const store = await readStore();
   const registration = store.registration;
   const planEnabled = Boolean(registration?.accessToken && registration.scopes.includes(REQUIRED_SCOPE));
   return {
+    cloudEnabled: true,
+    canSignInHere,
     connected: Boolean(registration?.accessToken),
     planEnabled,
     account: registration ? { email: registration.email, name: registration.name, picture: registration.picture } : null,
@@ -381,8 +476,49 @@ export async function getChatGptStatus(): Promise<ChatGptConnectionStatus> {
       ? "ChatGPT está conectado. Los nombres del alumnado se sustituyen localmente antes de cada petición."
       : registration?.accessToken
         ? "La cuenta está conectada, pero no autorizó el uso del plan de ChatGPT."
-        : "Modo manual. Conecta ChatGPT para activar el razonamiento con lenguaje natural.",
+        : canSignInHere
+          ? "Conecta ChatGPT para activar el razonamiento con lenguaje natural."
+          : "Esta instancia necesita importar una sesión autorizada previamente en Alfred local.",
   };
+}
+
+async function writeProtectedJson(targetPath: string, value: unknown) {
+  const resolved = path.resolve(targetPath);
+  const directory = path.dirname(resolved);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await writeFile(resolved, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  if (process.platform !== "win32") await chmod(resolved, 0o600);
+}
+
+export async function exportChatGptCredentials(targetPath: string) {
+  requireCloudAi();
+  const registration = (await readStore()).registration;
+  if (!registration?.refreshToken) throw new Error("No hay una sesión de ChatGPT transferible.");
+  await writeProtectedJson(targetPath, transferableCredentialsSchema.parse({
+    version: 1,
+    kind: "alfred-chatgpt-credentials",
+    registration,
+  }));
+}
+
+export async function importChatGptCredentials(sourcePath: string) {
+  requireCloudAi();
+  const resolved = path.resolve(sourcePath);
+  const metadata = await stat(resolved);
+  if (!metadata.isFile() || metadata.size > 64 * 1024) throw new Error("El archivo de credenciales no es válido.");
+  if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
+    throw new Error("El archivo de credenciales debe tener permisos 0600.");
+  }
+  if (process.platform !== "win32" && typeof process.getuid === "function" && metadata.uid !== process.getuid()) {
+    throw new Error("El archivo de credenciales debe pertenecer al usuario que ejecuta Alfred.");
+  }
+  const transferred = transferableCredentialsSchema.parse(JSON.parse(await readFile(resolved, "utf8")));
+  await withAuthStoreLock(async () => {
+    const store = await readStore();
+    store.registration = transferred.registration;
+    store.pending = null;
+    await persistStore(store);
+  });
 }
 
 export async function getChatGptModelCatalog() {
@@ -402,6 +538,7 @@ export async function getAliasSecret() {
 }
 
 export async function disconnectChatGpt() {
+  requireCloudAi();
   const store = await readStore();
   const registration = store.registration;
   let remoteRevocationConfirmed = true;

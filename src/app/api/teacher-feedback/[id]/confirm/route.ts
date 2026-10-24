@@ -1,8 +1,9 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { familyVersionSchema } from "@/domain/teacher-feedback";
 import { confirmTeacherFeedback } from "@/services/teacher-feedback-service";
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const input = familyVersionSchema.parse(await request.json());
@@ -14,3 +15,5 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
   }
 }
+
+export const POST = withApiAuth(handlePOST, "user");

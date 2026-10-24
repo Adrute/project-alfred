@@ -1,10 +1,11 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { cloudAiLogQuerySchema, deleteCloudAiLogsSchema } from "@/domain/cloud-ai-log";
 import { clearCloudAiLogs, getCloudAiLogDashboard } from "@/services/cloud-ai-log-service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const search = new URL(request.url).searchParams;
     const query = cloudAiLogQuerySchema.parse({
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request) {
   try {
     const input = deleteCloudAiLogsSchema.parse(await request.json());
     const result = await clearCloudAiLogs(input.confirmation);
@@ -32,3 +33,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudieron borrar los logs de ChatGPT." }, { status: 400 });
   }
 }
+
+export const GET = withApiAuth(handleGET, "admin");
+export const DELETE = withApiAuth(handleDELETE, "admin");

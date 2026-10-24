@@ -107,7 +107,7 @@ export async function getDatabaseRecords(key: DatabaseTableKey, take = 50): Prom
     case "agentMessages": return database.agentMessage.findMany({ orderBy: order, take });
     case "agentRuntimes": return database.agentRuntime.findMany({ orderBy: { updatedAt: "desc" }, take });
     case "agentExecutions": return database.agentExecution.findMany({ orderBy: { startedAt: "desc" }, take });
-    case "cloudAiTraces": return database.cloudAiTrace.findMany({ orderBy: order, take });
+    case "cloudAiTraces": return database.cloudAiTrace.findMany({ orderBy: order, take, select: { id: true, createdAt: true, provider: true, operation: true, model: true, status: true, durationMs: true, inputTokens: true, outputTokens: true, totalTokens: true } });
     case "seatingLayouts": return database.seatingLayout.findMany({ orderBy: order, take });
     case "seatingAssignments": return database.seatingAssignment.findMany({ orderBy: [{ seatingLayoutId: "asc" }, { row: "asc" }, { column: "asc" }], take });
     case "pendingActions": return database.pendingAction.findMany({ orderBy: order, take });

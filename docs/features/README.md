@@ -6,6 +6,7 @@ entrada indicados y las reglas globales de `AGENTS.md`.
 
 | Funcionalidad | Cuándo cargarla |
 |---|---|
+| [Acceso local, PWA y despliegue privado](production-access-deployment.md) | Cuentas, roles, CSRF, instalación móvil, Docker, Coolify y persistencia |
 | [Navegación y estructura](application-shell.md) | Menú lateral, layout global y comportamiento responsive |
 | [Alfred y conversaciones](assistant-chat.md) | Chat, memoria conversacional, burbuja contextual, formato de respuesta |
 | [Alumnado y grupos](students-classrooms.md) | Altas, perfiles generales, observaciones, matrículas y clases/grupos |

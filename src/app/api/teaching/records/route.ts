@@ -1,3 +1,4 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assessmentGradeInputSchema, studentSubjectRecordInputSchema } from "@/domain/teaching";
@@ -8,7 +9,7 @@ const inputSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("add_grade"), data: assessmentGradeInputSchema }).strict(),
 ]);
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const input = inputSchema.parse(await request.json());
     const result = input.action === "save_record"
@@ -19,3 +20,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo guardar el seguimiento académico." }, { status: 400 });
   }
 }
+
+export const POST = withApiAuth(handlePOST, "user");

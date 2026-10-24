@@ -14,6 +14,9 @@ hasta la confirmación explícita. El chat completo y la burbuja muestran siempr
 
 ## Fuente de verdad e invariantes
 
+- Las rutas docentes requieren sesión. `user` y `admin` comparten conversaciones y datos; la confirmación
+  de propuestas con operación administrativa requiere rol administrador.
+- Las mutaciones autenticadas envían el token CSRF entregado por la API de sesión.
 - `Conversation` y `Message` guardan cada hilo; `Conversation.contextJson` conserva foco y último resultado.
 - El historial ayuda a interpretar pronombres o continuaciones, pero las tablas de dominio aportan los hechos.
 - El modelo no puede afirmar una consulta o escritura que no haya ejecutado una herramienta real.

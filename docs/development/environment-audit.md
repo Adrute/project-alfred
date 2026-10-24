@@ -10,7 +10,7 @@
 | Node.js | 22.23.3 |
 | npm | 10.9.9 |
 | Git | 2.50.1 (Apple Git-155) |
-| IA | El inventario inicial incluía Ollama; ADR-013 lo sustituyó por ChatGPT opcional con OAuth |
+| IA | El inventario inicial incluía Ollama; ADR-013 lo sustituyó por ChatGPT como único proveedor generativo con OAuth |
 | pnpm / Yarn | No disponibles localmente; Corepack intentó resolverlos por red |
 
 `system_profiler SPHardwareDataType` proporcionó hardware y memoria. Las consultas directas `sysctl`

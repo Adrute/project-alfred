@@ -1,3 +1,4 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getConversation, handleChat } from "@/services/chat-service";
@@ -10,14 +11,17 @@ const inputSchema = z.object({
 });
 
 export const dynamic = "force-dynamic";
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const id = new URL(request.url).searchParams.get("conversationId") ?? undefined;
   return NextResponse.json(await getConversation(id), { headers: { "cache-control": "no-store" } });
 }
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     return NextResponse.json(await handleChat(inputSchema.parse(await request.json())));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo procesar el mensaje." }, { status: 400 });
   }
 }
+
+export const GET = withApiAuth(handleGET, "user");
+export const POST = withApiAuth(handlePOST, "user");

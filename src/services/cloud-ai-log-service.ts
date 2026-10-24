@@ -19,16 +19,6 @@ function rangeStart(range: CloudAiLogQuery["range"], now = new Date()) {
   return new Date(now.getTime() - hours * 60 * 60 * 1_000);
 }
 
-function parseJson(value: string | null) {
-  if (!value) return null;
-  try { return JSON.parse(value) as unknown; }
-  catch { return { malformed: true }; }
-}
-
-function trimError(value: string | undefined) {
-  return value?.slice(0, 2_000);
-}
-
 export const cloudAiTraceSink: CloudAiTraceSink = {
   async start(input) {
     const requestBodyJson = JSON.stringify(input.requestBody);
@@ -41,7 +31,7 @@ export const cloudAiTraceSink: CloudAiTraceSink = {
       operation: input.context.operation ?? "llm_request",
       model: input.model,
       status: "running",
-      requestBodyJson,
+      requestBodyJson: "{}",
       studentAliasCount: aliases.size,
       createdAt: input.startedAt,
     });
@@ -50,7 +40,7 @@ export const cloudAiTraceSink: CloudAiTraceSink = {
   async complete(traceId, input) {
     await completeCloudAiTrace(traceId, {
       status: "completed",
-      responseBodyJson: JSON.stringify(input.responseBody),
+      responseBodyJson: null,
       responseId: input.responseId,
       requestId: input.requestId,
       inputTokens: input.inputTokens,
@@ -66,8 +56,8 @@ export const cloudAiTraceSink: CloudAiTraceSink = {
     await failCloudAiTrace(traceId, {
       status: "failed",
       requestId: input.requestId,
-      errorCode: trimError(input.errorCode),
-      errorMessage: trimError(input.errorMessage),
+      errorCode: "cloud_request_failed",
+      errorMessage: null,
       durationMs: input.durationMs,
       finishedAt: input.finishedAt,
     });
@@ -118,8 +108,9 @@ export async function getCloudAiLogDashboard(query: CloudAiLogQuery) {
     histogram: histogram(matching, query.range),
     logs: logs.map((log) => ({
       ...log,
-      requestBody: parseJson(log.requestBodyJson),
-      responseBody: parseJson(log.responseBodyJson),
+      requestBody: null,
+      responseBody: null,
+      errorMessage: null,
       requestBodyJson: undefined,
       responseBodyJson: undefined,
     })),

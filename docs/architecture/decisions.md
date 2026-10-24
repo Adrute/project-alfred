@@ -86,8 +86,8 @@ confirmación humana.
 Se implementa el subconjunto anunciado por la tarjeta: mensajes síncronos de texto y partes de datos.
 Streaming, push y tareas persistentes se declaran como no soportados. No se incorpora un SDK porque
 la frontera necesaria es pequeña, se valida con Zod y añadir un framework de agentes aumentaría la
-superficie de dependencias. El endpoint continúa limitado a `127.0.0.1`; una futura exposición de red
-requerirá autenticación, autorización por cliente y una revisión específica de privacidad.
+superficie de dependencias. En local el endpoint usa `127.0.0.1`; el despliegue Docker lo enlaza dentro
+del bridge y exige sesión `admin`, con publicación host solo en loopback detrás de Tailscale Serve.
 
 ## ADR-012 · Binding A2A 1.0 interno y auditable
 
@@ -98,12 +98,17 @@ guardar prompts ni razonamiento interno. Se evita el SDK oficial porque no se ne
 ni push para módulos del mismo monolito; los contratos mantienen nombres y semántica de A2A 1.0 y
 están cubiertos por pruebas de regresión.
 
-## ADR-013 · ChatGPT opcional con seudonimización local
+## ADR-013 · ChatGPT como proveedor generativo con seudonimización local
 
-Alfred permanece completamente utilizable en modo manual. La profesora puede activar las funciones
-avanzadas mediante **Continue with ChatGPT**, usando el flujo público OIDC con PKCE para aplicaciones
-open source. Las credenciales se guardan en el runtime local, nunca en almacenamiento del navegador.
+ChatGPT es el único proveedor que selecciona Alfred para interpretación y razonamiento generativo. Las
+reglas locales se reservan para validación, cálculos reproducibles, resolución de entidades y controles
+de seguridad. La profesora autoriza la cuenta mediante **Continuar con ChatGPT**, usando el flujo público
+OIDC con PKCE para aplicaciones open source. Las credenciales se guardan en el runtime, nunca en el navegador.
 Todas las inferencias usan Responses API con `store: false` y `stream: true`.
+
+En una VPS, el callback loopback se completa primero en una ejecución local. Se transfiere después el
+registro OAuth mediante un archivo 0600 y un canal seguro; la importación conserva el `hostId` y el secreto
+de seudonimización propios del servidor. No se inventa un callback remoto ni un flujo no admitido.
 
 Antes de salir del proceso, una pasarela sustituye nombres, identificadores de SQLite y datos de
 contacto por alias opacos derivados por conversación. Las observaciones, calificaciones y demás hechos
@@ -111,15 +116,22 @@ pueden acompañar al alias para conservar capacidad de razonamiento. Las llamada
 traducen de vuelta localmente, se validan con Zod y siguen sujetas a `PendingAction`. Los endpoints de
 OpenAI están fijados en código; no se admite configurar destinos cloud arbitrarios.
 
+El alias usa el HMAC-SHA-256 completo del ID local y la conversación, por lo que cada alumno conserva una
+referencia única durante ese chat sin revelar el ID ni permitir correlacionarlo entre conversaciones. Como
+defensa obligatoria, el proveedor no puede construirse sin un guard de salida: inmediatamente antes de
+registrar o transmitir una petición, este compara todo el payload con el censo local y bloquea nombres,
+apellidos, IDs y datos de contacto que hayan sobrevivido a la seudonimización.
+
 ## ADR-014 · Auditoría local de llamadas a ChatGPT
 
-Cada invocación a Responses API crea una entrada `CloudAiTrace` antes de realizar la conexión. Se conserva
-el cuerpo JSON ya seudonimizado que se envía realmente, junto con la respuesta observable, modelo, operación,
-identificadores de soporte, tokens, duración y error. La petición no se envía si no puede iniciarse su traza.
+Cada invocación a Responses API crea una entrada `CloudAiTrace` antes de realizar la conexión. Se conservan
+solo metadatos operativos: proveedor, modelo, operación, identificadores de soporte, uso y duración. Las
+trazas nuevas no guardan cuerpos de petición o respuesta ni mensajes de error potencialmente sensibles.
+La petición no se envía si no puede iniciarse su traza.
 
-La interfaz **Administración → Logs** permite buscar y filtrar estos registros, inspeccionar su JSON y
-borrarlos con confirmación reforzada. No se persisten cabeceras de autorización, tokens OAuth, el mapa local
-entre alias y nombres ni elementos de razonamiento devueltos por el proveedor.
+La interfaz **Administración → Logs** permite buscar, filtrar y borrar estos registros con confirmación
+reforzada. La API y el explorador de base de datos redactan también los cuerpos y mensajes sensibles de
+trazas históricas. No se borran automáticamente: su eliminación requiere una decisión administrativa.
 
 ## ADR-015 · Modelo configurable por agente generativo
 
@@ -162,6 +174,31 @@ La profesora puede editar esa propuesta y debe confirmarla antes de asociarla a 
 La preparación posterior reutiliza la sesión en borrador para no separar los comentarios de la reunión. Si
 interviene ChatGPT, el contenido pasa por la seudonimización local existente; sin conexión se ofrece el texto
 original como borrador editable, sin fingir una reformulación generativa.
+
+## ADR-019 · Cuentas locales con espacio docente compartido
+
+La aplicación incorpora `AppUser` y `AppSession` en SQLite para autenticar a cada persona y reservar las
+operaciones administrativas al rol `admin`. El hash del token, y no el token de sesión, se persiste; las
+cuentas se administran desde el CLI local sin endpoint de registro. La duración de sesión es limitada y
+las mutaciones validan origen y CSRF.
+
+Los datos docentes existentes no tienen propietario por profesor. Por tanto, los roles distinguen acceso
+y capacidades administrativas, pero las cuentas autorizadas comparten alumnado, conversaciones y el
+resto del espacio docente. No se introduce migración de ownership ni asignación automática de registros,
+porque cambiaría la semántica y podría ocultar datos existentes. El aislamiento por usuario requeriría una
+decisión de producto y una migración separada.
+
+## ADR-020 · Una instancia SQLite tras un proxy privado
+
+La imagen Docker ejecuta un solo proceso de Alfred como usuario sin privilegios y conserva `/app/data`
+en un volumen. El bridge publica el puerto solo en loopback del host para que Tailscale Serve proporcione
+HTTPS privado. Se evita `network_mode: host` y no se arranca una segunda réplica sobre la misma base.
+El entrypoint aplica migraciones Prisma sin seed antes de servir tráfico; backup y rollback documentan
+una copia completa del volumen con el proceso detenido.
+
+El callback de OAuth open-source de ChatGPT permanece loopback según el contrato del proveedor. No se
+reemplaza por una URL tailnet ni se inventa un flujo alternativo. Por eso el Compose fuerza cloud apagado
+hasta que una integración remota admitida quede revisada y validada.
 
 ## Licencias directas
 

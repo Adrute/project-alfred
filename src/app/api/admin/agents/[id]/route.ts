@@ -1,9 +1,10 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { agentAiModelSchema } from "@/domain/agent-ai-settings";
 import { agentControlSchema, controlAgent, getAgentDashboard } from "@/services/agent-admin-service";
 import { setAgentAiModel } from "@/services/agent-ai-settings-service";
 
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const { action } = agentControlSchema.parse(await request.json());
@@ -14,7 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 }
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const { model } = agentAiModelSchema.parse(await request.json());
@@ -24,3 +25,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo configurar el modelo del agente." }, { status: 400 });
   }
 }
+
+export const POST = withApiAuth(handlePOST, "admin");
+export const PATCH = withApiAuth(handlePATCH, "admin");

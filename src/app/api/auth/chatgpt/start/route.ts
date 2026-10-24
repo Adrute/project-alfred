@@ -1,15 +1,17 @@
-import { NextResponse } from "next/server";
+import { withApiAuth } from "@/lib/api-security";
 import { beginChatGptSignIn } from "@/services/chatgpt-auth-service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handlePOST() {
   try {
-    return NextResponse.redirect(await beginChatGptSignIn());
+    return Response.json({ url: await beginChatGptSignIn() });
   } catch (error) {
-    const target = new URL("/", request.url);
-    target.searchParams.set("chatgpt", "error");
-    target.searchParams.set("reason", error instanceof Error ? error.message : "No se pudo iniciar la conexión.");
-    return NextResponse.redirect(target);
+    return Response.json(
+      { error: error instanceof Error ? error.message : "No se pudo iniciar la conexión." },
+      { status: 400 },
+    );
   }
 }
+
+export const POST = withApiAuth(handlePOST, "admin");

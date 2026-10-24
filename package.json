@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.12.0 <23"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.9"
   },
   "scripts": {
+    "auth:user": "node --import tsx scripts/manage-users.ts",
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1",
+    "start:production": "node --import tsx scripts/start-production.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -18,6 +23,7 @@
     "agents:validate": "node --import tsx scripts/validate-development-agents.ts",
     "branch:check": "node --import tsx scripts/check-development-branch.ts",
     "ai:check": "node --import tsx scripts/check-chatgpt.ts",
+    "ai:credentials": "node --import tsx scripts/manage-chatgpt-credentials.ts",
     "ai:eval": "node --import tsx scripts/evaluate-assistant-model.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -34,6 +40,8 @@
     "next": "^16.4.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "prisma": "^7.10.1",
+    "tsx": "^4.23.15",
     "write-excel-file": "^4.1.1",
     "zod": "^4.6.7"
   },
@@ -47,9 +55,7 @@
     "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.2",
-    "prisma": "^7.10.1",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
   }

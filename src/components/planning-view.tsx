@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 
@@ -27,7 +28,7 @@ const statusLabel: Record<string, string> = {
 const weekdays = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
+  const response = await apiFetch(url, { ...options, headers: { "content-type": "application/json", ...options?.headers } });
   const body = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(body.error ?? "No se pudo completar la operación.");
   return body;

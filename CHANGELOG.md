@@ -8,6 +8,8 @@ preparar una entrega.
 
 ### Added
 
+- Acceso local con cuentas y roles, sesiones protegidas, aplicación instalable y archivos de despliegue Docker/Coolify con SQLite persistente.
+- Activación de ChatGPT mediante el callback open-source oficial y transferencia protegida de la sesión a una VPS autohospedada.
 - Flujo de comentarios del profesorado por alumno: conserva el original, propone una redacción respetuosa
   para la familia, permite revisarla y la vincula tras confirmación a la próxima tutoría.
 - Menú lateral colapsable con preferencia persistente y comportamiento accesible en escritorio y móvil.
@@ -25,6 +27,7 @@ preparar una entrega.
 
 ### Changed
 
+- ChatGPT pasa a ser el único proveedor generativo en producción; el interruptor cloud queda como corte de emergencia y las trazas nuevas guardan solo metadatos.
 - Alfred conserva el contexto de cada conversación, encadena herramientas tipadas y presenta respuestas
   con Markdown seguro bajo una única identidad visual.
 - La página de inicio se orienta al trabajo del día y el asistente contextual está disponible en toda la app.
@@ -38,6 +41,10 @@ preparar una entrega.
 
 ### Security
 
+- Las operaciones de la aplicación requieren sesión; las mutaciones validan origen y token CSRF, y los endpoints administrativos requieren rol admin.
+- La dependencia transitiva `fast-uri` se fuerza a una versión corregida para eliminar avisos de validación de URI en el runtime de migraciones.
 - Los nombres, datos de contacto e identificadores internos del alumnado no se envían a ChatGPT.
 - Las escrituras propuestas mediante lenguaje natural requieren validación, `PendingAction` y confirmación.
-- Las trazas excluyen credenciales y razonamiento interno y permiten inspeccionar el cuerpo seudonimizado.
+- Las trazas excluyen credenciales, cuerpos de petición/respuesta y razonamiento interno.
+- La exportación OAuth excluye la identidad y el secreto de alias del host; la importación exige un archivo 0600 y conserva ambos valores de la VPS.
+- La frontera de OpenAI bloquea cualquier payload que aún contenga nombres, apellidos, IDs internos o contacto del alumnado; los alias usan el HMAC completo y son únicos por alumno y conversación.

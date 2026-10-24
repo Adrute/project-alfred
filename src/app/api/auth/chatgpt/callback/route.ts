@@ -1,9 +1,10 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { completeChatGptSignIn } from "@/services/chatgpt-auth-service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const target = new URL("/", request.url);
   try {
     await completeChatGptSignIn(new URL(request.url).searchParams);
@@ -14,3 +15,5 @@ export async function GET(request: Request) {
   }
   return NextResponse.redirect(target);
 }
+
+export const GET = withApiAuth(handleGET, "admin");

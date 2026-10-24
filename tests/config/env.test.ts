@@ -10,8 +10,16 @@ describe("runtime configuration", () => {
     expect(config.DATABASE_URL).toMatch(/^file:/);
   });
 
-  it("rejects exposing the application to the local network", () => {
-    expect(() => loadConfig({ HOST: "0.0.0.0" })).toThrow();
+  it("permits an explicit container bind while retaining loopback defaults", () => {
+    expect(loadConfig({ HOST: "0.0.0.0" }).HOST).toBe("0.0.0.0");
+    expect(() => loadConfig({ HOST: "192.168.1.1" })).toThrow();
+  });
+
+  it("requires an exact trusted HTTPS production origin", () => {
+    expect(() => loadConfig({ NODE_ENV: "production" })).toThrow(/APP_ORIGIN/);
+    expect(() => loadConfig({ APP_ORIGIN: "http://example.com" })).toThrow();
+    expect(() => loadConfig({ APP_ORIGIN: "https://example.com/path" })).toThrow();
+    expect(loadConfig({ NODE_ENV: "production", APP_ORIGIN: "https://example.ts.net" }).CLOUD_AI_ENABLED).toBe(false);
   });
 
   it("rejects remote AI providers", () => {

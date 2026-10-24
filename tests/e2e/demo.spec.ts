@@ -2,11 +2,15 @@ import { test, expect } from "@playwright/test";
 
 test("complete teacher demonstration", async ({ page }) => {
   await page.goto("/");
+  await page.getByLabel("Usuario", { exact: true }).fill("e2e-admin");
+  await page.getByLabel("Contraseña", { exact: true }).fill("Alfred-ficticio-e2e-2026");
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Tu día" })).toBeVisible();
   const aiStatus = await page.request.get("/api/auth/chatgpt");
   expect(aiStatus.ok()).toBe(true);
   expect(await aiStatus.json()).toMatchObject({ connected: false, planEnabled: false });
   await expect(page.getByRole("heading", { name: "Tu día" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Continuar con ChatGPT" })).toBeVisible();
+  await expect(page.getByText("IA externa desactivada", { exact: true })).toBeVisible();
   await expect(page.locator(".sidebar-brand-avatar img")).toHaveAttribute("src", /alfred-avatar/);
   await expect(page.locator(".hero-avatar img")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Agenda de hoy", exact: true })).toBeVisible();

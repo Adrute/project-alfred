@@ -1,3 +1,4 @@
+import { withApiAuth } from "@/lib/api-security";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { newStudentSchema } from "@/domain/student-admin";
@@ -11,7 +12,7 @@ const schema = z.object({
 }).refine((value) => value.students?.length || (value.firstName && value.lastName), {
   message: "Indica un alumno o una lista de alumnos.",
 });
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const input = schema.parse(await request.json());
     const students = input.students ?? [{ firstName: input.firstName!, lastName: input.lastName! }];
@@ -19,3 +20,5 @@ export async function POST(request: Request) {
     return NextResponse.json(result, { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudo crear el alumno." }, { status: 400 }); }
 }
+
+export const POST = withApiAuth(handlePOST, "user");

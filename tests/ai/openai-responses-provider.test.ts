@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenAiResponsesProvider } from "@/ai/providers/openai-responses-provider";
 import type { CloudAiTraceSink } from "@/ai/cloud-ai-trace";
 
@@ -7,13 +7,17 @@ function eventStream(events: unknown[]) {
   return new Response(payload, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
 
+const allowRequest = async () => undefined;
+
 describe("OpenAiResponsesProvider", () => {
+  beforeEach(() => vi.stubEnv("CLOUD_AI_ENABLED", "true"));
+  afterEach(() => vi.unstubAllEnvs());
   it("uses the ChatGPT OAuth token with non-persistent streaming Responses requests", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(eventStream([
       { type: "response.output_text.delta", delta: "Respuesta final" },
       { type: "response.completed", response: { output: [] } },
     ]));
-    const provider = new OpenAiResponsesProvider({ accessToken: "secret-oauth-token", model: "gpt-test", fetchImplementation: fetchMock });
+    const provider = new OpenAiResponsesProvider({ accessToken: "secret-oauth-token", model: "gpt-test", fetchImplementation: fetchMock, requestGuard: allowRequest });
 
     await expect(provider.generate("Hola", { system: "Responde en español" })).resolves.toEqual({
       content: "Respuesta final",
@@ -28,12 +32,25 @@ describe("OpenAiResponsesProvider", () => {
     expect(JSON.stringify(body)).not.toContain('"role":"system"');
   });
 
+  it("never contacts OpenAI when the final privacy guard rejects a payload", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    const requestGuard = vi.fn().mockRejectedValue(new Error("student identity"));
+    const traceSink: CloudAiTraceSink = { start: vi.fn(), complete: vi.fn(), fail: vi.fn() };
+    const provider = new OpenAiResponsesProvider({ accessToken: "secret", model: "gpt-test", fetchImplementation: fetchMock, requestGuard, traceSink });
+
+    await expect(provider.generate("Nombre real"))
+      .rejects.toThrow(/proteger la identidad/);
+    expect(requestGuard).toHaveBeenCalledOnce();
+    expect(traceSink.start).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("parses function calls and returns their call id", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(eventStream([
       { type: "response.output_item.done", item: { type: "function_call", call_id: "call-1", name: "search_students", arguments: '{"nameStartsWith":"E"}' } },
       { type: "response.completed", response: { output: [] } },
     ]));
-    const provider = new OpenAiResponsesProvider({ accessToken: "token", model: "gpt-test", fetchImplementation: fetchMock });
+    const provider = new OpenAiResponsesProvider({ accessToken: "token", model: "gpt-test", fetchImplementation: fetchMock, requestGuard: allowRequest });
 
     const response = await provider.chat(
       [{ role: "system", content: "Usa herramientas" }, { role: "user", content: "Busca alumnos" }],
@@ -48,7 +65,7 @@ describe("OpenAiResponsesProvider", () => {
       { type: "response.output_text.delta", delta: "Dos alumnos" },
       { type: "response.completed", response: { output: [] } },
     ]));
-    const provider = new OpenAiResponsesProvider({ accessToken: "token", model: "gpt-test", fetchImplementation: fetchMock });
+    const provider = new OpenAiResponsesProvider({ accessToken: "token", model: "gpt-test", fetchImplementation: fetchMock, requestGuard: allowRequest });
     await provider.chat([
       { role: "user", content: "Busca" },
       { role: "assistant", content: "", toolCalls: [{ id: "call-1", function: { name: "search_students", arguments: {} } }] },
@@ -81,6 +98,7 @@ describe("OpenAiResponsesProvider", () => {
       fetchImplementation: fetchMock,
       traceContext: { conversationId: "conversation-1", operation: "alfred_chat" },
       traceSink,
+      requestGuard: allowRequest,
     });
 
     await provider.generate("Consulta a ALUMNO_ABCDEF1234", { system: "Responde" });
