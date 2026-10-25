@@ -9,7 +9,7 @@ preparar una entrega.
 ### Added
 
 - Acceso local con cuentas y roles, sesiones protegidas, aplicación instalable y archivos de despliegue Docker/Coolify con SQLite persistente.
-- Activación de ChatGPT mediante el callback open-source oficial y transferencia protegida de la sesión a una VPS autohospedada.
+- Activación local de ChatGPT mediante callback loopback y acceso OAuth web desde el botón en instancias HTTPS con cliente registrado.
 - Flujo de comentarios del profesorado por alumno: conserva el original, propone una redacción respetuosa
   para la familia, permite revisarla y la vincula tras confirmación a la próxima tutoría.
 - Menú lateral colapsable con preferencia persistente y comportamiento accesible en escritorio y móvil.
@@ -46,5 +46,5 @@ preparar una entrega.
 - Los nombres, datos de contacto e identificadores internos del alumnado no se envían a ChatGPT.
 - Las escrituras propuestas mediante lenguaje natural requieren validación, `PendingAction` y confirmación.
 - Las trazas excluyen credenciales, cuerpos de petición/respuesta y razonamiento interno.
-- La exportación OAuth excluye la identidad y el secreto de alias del host; la importación exige un archivo 0600 y conserva ambos valores de la VPS.
+- El callback OAuth valida sesión administradora, `state`, PKCE y nonce antes de activar la conexión.
 - La frontera de OpenAI bloquea cualquier payload que aún contenga nombres, apellidos, IDs internos o contacto del alumnado; los alias usan el HMAC completo y son únicos por alumno y conversación.

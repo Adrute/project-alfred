@@ -5,6 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { loadConfig } from "@/config/env";
 import { requireCloudAi } from "@/lib/cloud-policy";
+import { constantEqual, hashSessionToken } from "@/services/auth-service";
 
 const AUTHORIZATION_ENDPOINT = "https://auth.openai.com/api/accounts/authorize";
 const TOKEN_ENDPOINT = "https://auth.openai.com/api/accounts/oauth/token";
@@ -20,6 +21,7 @@ const pendingSchema = z.object({
   verifier: z.string().min(43),
   redirectUri: z.string().url(),
   requestedClientId: z.string().min(1),
+  sessionHash: z.string().length(64).optional(),
   createdAt: z.string().datetime(),
 });
 
@@ -45,12 +47,6 @@ const authStoreSchema = z.object({
   aliasSecret: z.string().min(32),
   registration: registrationSchema.nullable().default(null),
   pending: pendingSchema.nullable().default(null),
-});
-
-const transferableCredentialsSchema = z.object({
-  version: z.literal(1),
-  kind: z.literal("alfred-chatgpt-credentials"),
-  registration: registrationSchema,
 });
 
 const tokenResponseSchema = z.object({
@@ -213,53 +209,57 @@ function randomUrlSafe(bytes = 32) {
 }
 
 function callbackUri() {
-  return `http://127.0.0.1:${loadConfig().PORT}/auth/callback`;
+  const config = loadConfig();
+  return `${config.APP_ORIGIN}/auth/callback`;
 }
 
 function canAuthorizeOnThisHost() {
   const config = loadConfig();
-  return config.APP_ORIGIN === `http://127.0.0.1:${config.PORT}`;
+  return config.APP_ORIGIN === `http://127.0.0.1:${config.PORT}` || Boolean(config.CHATGPT_OAUTH_CLIENT_ID);
 }
 
-export async function beginChatGptSignIn() {
+export async function beginChatGptSignIn(sessionToken: string) {
   requireCloudAi();
   if (!canAuthorizeOnThisHost()) {
-    throw new Error("El acceso a ChatGPT debe autorizarse en Alfred ejecutado localmente y transferirse después a esta instancia.");
+    throw new Error("Configura un cliente OAuth web de OpenAI para conectar ChatGPT en esta instancia.");
   }
-  const store = await readStore();
-  const state = randomUrlSafe();
-  const nonce = randomUrlSafe();
-  const verifier = randomUrlSafe(48);
-  const redirectUri = callbackUri();
-  const requestedClientId = store.registration?.clientId ?? "dynamic_agent_client";
-  store.pending = pendingSchema.parse({
-    state,
-    nonce,
-    verifier,
-    redirectUri,
-    requestedClientId,
-    createdAt: new Date().toISOString(),
-  });
-  await persistStore(store);
+  return withAuthStoreLock(async () => {
+    const store = await readStore();
+    const state = randomUrlSafe();
+    const nonce = randomUrlSafe();
+    const verifier = randomUrlSafe(48);
+    const redirectUri = callbackUri();
+    const requestedClientId = loadConfig().CHATGPT_OAUTH_CLIENT_ID ?? store.registration?.clientId ?? "dynamic_agent_client";
+    store.pending = pendingSchema.parse({
+      state,
+      nonce,
+      verifier,
+      redirectUri,
+      requestedClientId,
+      sessionHash: hashSessionToken(sessionToken),
+      createdAt: new Date().toISOString(),
+    });
+    await persistStore(store);
 
-  const parameters = new URLSearchParams({
-    client_id: requestedClientId,
-    ext_agent_host_id: store.hostId,
-    response_type: "code",
-    redirect_uri: redirectUri,
-    scope: REQUESTED_SCOPES,
-    resource: RESOURCE,
-    state,
-    nonce,
-    code_challenge_method: "S256",
-    code_challenge: base64Url(createHash("sha256").update(verifier).digest()),
+    const parameters = new URLSearchParams({
+      client_id: requestedClientId,
+      ext_agent_host_id: store.hostId,
+      response_type: "code",
+      redirect_uri: redirectUri,
+      scope: REQUESTED_SCOPES,
+      resource: RESOURCE,
+      state,
+      nonce,
+      code_challenge_method: "S256",
+      code_challenge: base64Url(createHash("sha256").update(verifier).digest()),
+    });
+    if (requestedClientId === "dynamic_agent_client") parameters.set("agent_name_hint", "Alfred");
+    else if (!loadConfig().CHATGPT_OAUTH_CLIENT_ID) {
+      if (store.registration?.idToken) parameters.set("id_token_hint", store.registration.idToken);
+      if (store.registration?.email) parameters.set("login_hint", store.registration.email);
+    }
+    return `${AUTHORIZATION_ENDPOINT}?${parameters.toString()}`;
   });
-  if (requestedClientId === "dynamic_agent_client") parameters.set("agent_name_hint", "Alfred");
-  else {
-    if (store.registration?.idToken) parameters.set("id_token_hint", store.registration.idToken);
-    if (store.registration?.email) parameters.set("login_hint", store.registration.email);
-  }
-  return `${AUTHORIZATION_ENDPOINT}?${parameters.toString()}`;
 }
 
 function decodeJwtPart<T>(value: string): T {
@@ -337,15 +337,19 @@ async function selectModel(accessToken: string) {
   }
 }
 
-export async function completeChatGptSignIn(parameters: URLSearchParams) {
+export async function completeChatGptSignIn(parameters: URLSearchParams, sessionToken: string) {
   requireCloudAi();
-  const store = await readStore();
-  const pending = store.pending;
-  if (!pending) throw new Error("No hay ningún inicio de sesión pendiente.");
-  store.pending = null;
-  await persistStore(store);
-  if (Date.now() - Date.parse(pending.createdAt) > 10 * 60_000) throw new Error("El inicio de sesión ha caducado. Inténtalo de nuevo.");
-  if (parameters.get("state") !== pending.state) throw new Error("La respuesta de ChatGPT no coincide con la solicitud iniciada.");
+  const { pending, previousRegistration } = await withAuthStoreLock(async () => {
+    const store = await readStore();
+    const pending = store.pending;
+    if (!pending) throw new Error("No hay ningún inicio de sesión pendiente.");
+    if (Date.now() - Date.parse(pending.createdAt) > 10 * 60_000) throw new Error("El inicio de sesión ha caducado. Inténtalo de nuevo.");
+    if (!pending.sessionHash || !constantEqual(pending.sessionHash, hashSessionToken(sessionToken))) throw new Error("El inicio de sesión pertenece a otra sesión de Alfred.");
+    if (parameters.get("state") !== pending.state) throw new Error("La respuesta de ChatGPT no coincide con la solicitud iniciada.");
+    store.pending = null;
+    await persistStore(store);
+    return { pending, previousRegistration: store.registration };
+  });
   if (parameters.get("error")) throw new Error("Se canceló o rechazó el acceso a ChatGPT.");
   const code = z.string().min(1).parse(parameters.get("code"));
   const callbackClientId = parameters.get("client_id");
@@ -371,12 +375,12 @@ export async function completeChatGptSignIn(parameters: URLSearchParams) {
   if (!response.ok) throw new Error(`OpenAI rechazó el intercambio OAuth (${response.status}).`);
   const tokens = tokenResponseSchema.parse(await response.json());
   const identity = await validateIdToken(tokens.id_token, clientId, pending.nonce);
-  if (store.registration?.subject && pending.requestedClientId !== "dynamic_agent_client" && store.registration.subject !== identity.sub) {
+  if (previousRegistration?.subject && previousRegistration.subject !== identity.sub) {
     throw new Error("La cuenta de ChatGPT no coincide con la conexión guardada.");
   }
   const scopes = tokens.scope.split(/\s+/).filter(Boolean);
   const selectedModel = await selectModel(tokens.access_token);
-  store.registration = registrationSchema.parse({
+  const registration = registrationSchema.parse({
     subject: identity.sub,
     clientId,
     email: identity.email,
@@ -391,7 +395,12 @@ export async function completeChatGptSignIn(parameters: URLSearchParams) {
     scopes,
     selectedModel,
   });
-  await persistStore(store);
+  await withAuthStoreLock(async () => {
+    const store = await readStore();
+    if (store.registration?.subject && store.registration.subject !== identity.sub) throw new Error("La cuenta de ChatGPT no coincide con la conexión guardada.");
+    store.registration = registration;
+    await persistStore(store);
+  });
   return getChatGptStatus();
 }
 
@@ -478,47 +487,8 @@ export async function getChatGptStatus(): Promise<ChatGptConnectionStatus> {
         ? "La cuenta está conectada, pero no autorizó el uso del plan de ChatGPT."
         : canSignInHere
           ? "Conecta ChatGPT para activar el razonamiento con lenguaje natural."
-          : "Esta instancia necesita importar una sesión autorizada previamente en Alfred local.",
+          : "Configura un cliente OAuth web de OpenAI para habilitar el inicio de sesión.",
   };
-}
-
-async function writeProtectedJson(targetPath: string, value: unknown) {
-  const resolved = path.resolve(targetPath);
-  const directory = path.dirname(resolved);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFile(resolved, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-  if (process.platform !== "win32") await chmod(resolved, 0o600);
-}
-
-export async function exportChatGptCredentials(targetPath: string) {
-  requireCloudAi();
-  const registration = (await readStore()).registration;
-  if (!registration?.refreshToken) throw new Error("No hay una sesión de ChatGPT transferible.");
-  await writeProtectedJson(targetPath, transferableCredentialsSchema.parse({
-    version: 1,
-    kind: "alfred-chatgpt-credentials",
-    registration,
-  }));
-}
-
-export async function importChatGptCredentials(sourcePath: string) {
-  requireCloudAi();
-  const resolved = path.resolve(sourcePath);
-  const metadata = await stat(resolved);
-  if (!metadata.isFile() || metadata.size > 64 * 1024) throw new Error("El archivo de credenciales no es válido.");
-  if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
-    throw new Error("El archivo de credenciales debe tener permisos 0600.");
-  }
-  if (process.platform !== "win32" && typeof process.getuid === "function" && metadata.uid !== process.getuid()) {
-    throw new Error("El archivo de credenciales debe pertenecer al usuario que ejecuta Alfred.");
-  }
-  const transferred = transferableCredentialsSchema.parse(JSON.parse(await readFile(resolved, "utf8")));
-  await withAuthStoreLock(async () => {
-    const store = await readStore();
-    store.registration = transferred.registration;
-    store.pending = null;
-    await persistStore(store);
-  });
 }
 
 export async function getChatGptModelCatalog() {

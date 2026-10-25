@@ -19,6 +19,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CLOUD_AI_ENABLED: ${CLOUD_AI_ENABLED:-true}
       CHATGPT_MODEL: ${CHATGPT_MODEL:-gpt-6.1-sol}
+      CHATGPT_OAUTH_CLIENT_ID: ${CHATGPT_OAUTH_CLIENT_ID:-}
     volumes:
       - alfred-data:/app/data
     ports:

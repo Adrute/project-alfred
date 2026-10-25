@@ -366,7 +366,8 @@ function ChatGptControl({ status, disconnect }: { status: ChatGptStatus; disconn
     } catch (caught) { setError(caught instanceof Error ? caught.message : "No se pudo iniciar la conexión."); setBusy(false); }
   }
   if (!status.cloudEnabled) return <span className="cloud-disabled" title={status.detail}>IA externa desactivada</span>;
-  if (!status.planEnabled && !status.canSignInHere) return <span className="cloud-disabled" title={status.detail}>ChatGPT pendiente de activar</span>;
+  if (!status.planEnabled && !status.canSignInHere) return <span className="cloud-disabled" title={status.detail}>ChatGPT pendiente de configurar</span>;
+  if (status.connected && !status.planEnabled) return <div className="chatgpt-connected"><div><strong>{status.account?.email ?? "Cuenta de ChatGPT conectada"}</strong><small>{status.detail}</small></div><button className="chatgpt-connect" disabled={busy} onClick={() => void connect()}>Reintentar autorización</button><button onClick={() => void disconnect()} title="Desconectar ChatGPT">×</button>{error && <span role="alert">{error}</span>}</div>;
   if (!status.planEnabled) return <div><button className="chatgpt-connect" disabled={busy} onClick={() => void connect()}>Continuar con ChatGPT</button>{error && <span role="alert">{error}</span>}</div>;
   return <div className="chatgpt-connected" title={status.detail}><span>✦</span><div><strong>ChatGPT activo</strong><small>{status.account?.email ?? status.model ?? "Plan conectado"}</small></div><button onClick={() => void disconnect()} title="Desconectar ChatGPT">×</button></div>;
 }

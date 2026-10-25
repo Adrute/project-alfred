@@ -102,13 +102,14 @@ están cubiertos por pruebas de regresión.
 
 ChatGPT es el único proveedor que selecciona Alfred para interpretación y razonamiento generativo. Las
 reglas locales se reservan para validación, cálculos reproducibles, resolución de entidades y controles
-de seguridad. La profesora autoriza la cuenta mediante **Continuar con ChatGPT**, usando el flujo público
-OIDC con PKCE para aplicaciones open source. Las credenciales se guardan en el runtime, nunca en el navegador.
+de seguridad. La profesora autoriza la cuenta mediante **Continuar con ChatGPT**, usando OIDC con PKCE.
+Las credenciales se guardan en el runtime, nunca en el navegador.
 Todas las inferencias usan Responses API con `store: false` y `stream: true`.
 
-En una VPS, el callback loopback se completa primero en una ejecución local. Se transfiere después el
-registro OAuth mediante un archivo 0600 y un canal seguro; la importación conserva el `hostId` y el secreto
-de seudonimización propios del servidor. No se inventa un callback remoto ni un flujo no admitido.
+En local se conserva el callback loopback del cliente open-source. En una instancia HTTPS, el botón usa
+un cliente OAuth web público registrado por OpenAI para el callback exacto de Alfred. El registro web de
+identidad no asegura por sí mismo permiso de uso del plan; Alfred exige `chatgpt.tokens.use.direct` para
+inferir. No se transfiere ninguna sesión desde otro equipo.
 
 Antes de salir del proceso, una pasarela sustituye nombres, identificadores de SQLite y datos de
 contacto por alias opacos derivados por conversación. Las observaciones, calificaciones y demás hechos
@@ -196,9 +197,9 @@ HTTPS privado. Se evita `network_mode: host` y no se arranca una segunda réplic
 El entrypoint aplica migraciones Prisma sin seed antes de servir tráfico; backup y rollback documentan
 una copia completa del volumen con el proceso detenido.
 
-El callback de OAuth open-source de ChatGPT permanece loopback según el contrato del proveedor. No se
-reemplaza por una URL tailnet ni se inventa un flujo alternativo. Por eso el Compose fuerza cloud apagado
-hasta que una integración remota admitida quede revisada y validada.
+El callback del cliente open-source permanece en loopback. El despliegue HTTPS requiere un cliente OAuth
+web registrado por OpenAI y una URL de retorno exacta. Compose deja el ID sin configurar hasta obtener
+ese registro; el corte de emergencia cloud continúa disponible.
 
 ## Licencias directas
 

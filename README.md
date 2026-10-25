@@ -132,6 +132,7 @@ Copiar `.env.example` a `.env`. Las variables se validan al iniciar:
 | `APP_ORIGIN` | `http://127.0.0.1:3000` | Origen exacto; en producción debe ser HTTPS |
 | `CLOUD_AI_ENABLED` | `true` | Activa ChatGPT; ponerlo a `false` corta toda comunicación cloud |
 | `CHATGPT_MODEL` | `gpt-6.1-sol` | Modelo preferido, sujeto al catálogo disponible para la cuenta conectada |
+| `CHATGPT_OAUTH_CLIENT_ID` | vacío | ID de cliente OAuth público registrado para el callback HTTPS de producción |
 | `DATABASE_URL` | `file:./data/alfred.db` | Archivo SQLite configurable |
 | `DATA_DIRECTORY` | `./data` | Directorio local de datos |
 | `LOG_LEVEL` | `info` | Nivel de registro |
@@ -168,7 +169,6 @@ npm run test:e2e     # recorrido completo en Chromium
 npm run agents:validate # valida roles y adaptadores del equipo de desarrollo
 npm run branch:check # impide trabajar directamente en main/master o ramas sin convención
 npm run ai:check      # comprueba la conexión OAuth y una salida estructurada de ChatGPT
-npm run ai:credentials -- export|import <ruta> # traslada una sesión protegida a una VPS
 npm run ai:eval       # evalúa la selección de herramientas con la cuenta conectada
 npm run db:generate  # genera Prisma Client
 npm run db:migrate   # crea/aplica una migración de desarrollo
@@ -303,8 +303,9 @@ Safari e iPhone real siguen pendientes de validación.
 
 - La compatibilidad arquitectónica con Windows está implementada, pero todavía requiere una ejecución
   real en Windows 11 para considerarse validada.
-- El callback OAuth de ChatGPT es loopback y no puede completarse directamente desde Safari/iPhone contra
-  la VPS. La sesión se autoriza en Alfred local y se transfiere de forma protegida siguiendo `DEPLOYMENT.md`.
+- En producción, el botón **Continuar con ChatGPT** necesita un cliente OAuth web público registrado
+  por OpenAI con la URL HTTPS exacta de retorno. El inicio de sesión no habilita inferencia si el cliente
+  no obtiene `chatgpt.tokens.use.direct`; consulta `DEPLOYMENT.md`.
 - El solver usa búsqueda heurística reproducible con 2.000 intentos; garantiza restricciones duras en
   el resultado, pero no demuestra óptimo global para aulas mayores o restricciones futuras.
 - La evaluación de intención debe pasar completa con el modelo configurado antes de una entrega.

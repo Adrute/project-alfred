@@ -53,11 +53,13 @@ Variables opcionales:
 | `LOG_LEVEL` | `info` | Nivel de logs técnicos. |
 | `CLOUD_AI_ENABLED` | `true` | Habilita ChatGPT; usar `false` para cortar inmediatamente la salida cloud. |
 | `CHATGPT_MODEL` | `gpt-6.1-sol` | Preferencia sujeta al catálogo de la cuenta conectada. |
+| `CHATGPT_OAUTH_CLIENT_ID` | vacío | Cliente OAuth público registrado por OpenAI para `<APP_ORIGIN>/auth/callback`. |
 
 El Compose determina `DATABASE_URL=file:/app/data/alfred.db`, `DATA_DIRECTORY=/app/data`,
 `HOST=0.0.0.0` y `PORT=3000`. No reemplaces esos valores desde Coolify.
 No se requieren secretos para iniciar Alfred; las contraseñas se crean localmente después del primer
-arranque. No introduzcas tokens de Tailscale ni OAuth como variables de la aplicación.
+arranque. El ID de cliente OAuth no es un secreto. No introduzcas tokens de Tailscale ni OAuth como
+variables de la aplicación.
 
 ## Primer arranque
 
@@ -192,69 +194,29 @@ Chromium; Safari/iPhone real queda pendiente de una validación manual en ese di
 
 ## Integración ChatGPT
 
-El flujo open-source exige `http://127.0.0.1:<PORT>/auth/callback`. Alfred utiliza exactamente esa ruta.
-El navegador que completa OAuth debe estar en la misma máquina que Alfred; por tanto, Safari del iPhone
-no puede autorizar directamente una instancia ejecutada en la VPS. No cambies el callback a un hostname
-tailnet, no inventes un device code y no uses el flujo HTTPS para sitios web, que es un producto distinto.
+Para conectar ChatGPT desde la instancia HTTPS, registra con OpenAI un cliente OAuth **público** cuya
+URL de retorno exacta sea `<APP_ORIGIN>/auth/callback`. Configura el ID recibido en
+`CHATGPT_OAUTH_CLIENT_ID` y despliega la aplicación. No se copia ninguna sesión desde un equipo local.
 
-OpenAI documenta para VMs autohospedadas autorizar primero la misma herramienta en local y transferir su
-archivo de credenciales por un canal seguro, conservando la identidad propia del host remoto. Procedimiento:
+Entra en Alfred como administrador y pulsa **Continuar con ChatGPT**. El navegador va a OpenAI, vuelve
+al callback HTTPS de Alfred y la conexión queda guardada en el servidor. La sesión de Alfred que inicia
+el proceso debe seguir activa; `state`, PKCE, nonce e identidad se comprueban antes de aceptar tokens.
 
-1. En el Mac, usa una copia local autorizada de Alfred con `APP_ORIGIN=http://127.0.0.1:3000`,
-   `PORT=3000` y `CLOUD_AI_ENABLED=true`. Inicia Alfred, entra como `admin` y pulsa
-   **Continuar con ChatGPT**. El callback vuelve a `/auth/callback` en ese mismo Mac.
-2. Verifica la inferencia real antes de exportar:
+El cliente OAuth debe poder solicitar `offline_access`, `resource.invoke` y
+`chatgpt.tokens.use.direct`. El registro OAuth web para identidad y el permiso de uso del plan son
+capacidades distintas: si OpenAI no autoriza este último, Alfred mostrará la cuenta conectada, pero no
+usará ChatGPT para inferencia. Este acceso requiere la autorización y el cliente apropiados de OpenAI;
+configurar un ID cualquiera no los concede. No se ha validado aún con un cliente real.
 
-   ```sh
-   npm run ai:check
-   npm run ai:credentials -- export /ruta/privada/alfred-chatgpt.json
-   ```
+En una instalación local abierta en `http://127.0.0.1:<PORT>`, sigue disponible el callback loopback del
+flujo open-source. El arranque de producción elimina locks OAuth huérfanos antes de abrir el proceso web.
+No borres `data/auth/chatgpt.json`: contiene el registro OAuth activo y el secreto local de alias.
 
-   El segundo comando crea un archivo 0600 que contiene tokens OAuth. No lo abras en un editor cloud,
-   no lo pegues en Coolify y no lo añadas a Git.
-3. Detén la ejecución local para evitar que dos hosts refresquen simultáneamente la misma sesión. Copia
-   el archivo a una ruta privada de la VPS mediante SSH/SCP y comprueba que mantiene permisos 0600.
-4. Identifica de forma inequívoca el contenedor de Alfred. Envía el archivo por stdin a un proceso que
-   corre con el mismo usuario sin privilegios del servicio; así Docker no crea una copia `root:root` y no
-   hace falta devolver capacidades Linux al contenedor:
+Documentación oficial:
 
-   ```sh
-   docker exec -i <contenedor-alfred> node --input-type=module -e "import { open } from 'node:fs/promises'; import { pipeline } from 'node:stream/promises'; const file = await open('/app/data/chatgpt-transfer.json', 'wx', 0o600); await pipeline(process.stdin, file.createWriteStream());" < /ruta/privada/alfred-chatgpt.json
-   docker exec <contenedor-alfred> npm run ai:credentials -- import /app/data/chatgpt-transfer.json
-   docker exec <contenedor-alfred> npm run ai:check
-   ```
-
-   La importación reemplaza únicamente el registro OAuth; mantiene el `hostId` y el secreto de alias
-   creados en la VPS. El refresco OAuth usa comprobación de concurrencia para no sobrescribir una sesión
-   recién importada. No modifica SQLite ni ejecuta seeds. Reinicia después el servicio desde Coolify para
-   que todos los procesos partan del estado importado.
-5. Tras verificar `ai:check`, elimina las dos copias transitorias del archivo de transferencia, primero
-   dentro del contenedor y después en el host:
-
-   ```sh
-   docker exec <contenedor-alfred> node --input-type=module -e "import { unlink } from 'node:fs/promises'; await unlink('/app/data/chatgpt-transfer.json');"
-   rm /ruta/privada/alfred-chatgpt.json
-   ```
-
-   Conserva
-   `data/auth/chatgpt.json`, que es la credencial activa del runtime y queda incluida en los backups del
-   volumen completo. No uses **Desconectar ChatGPT** en la copia local: la revocación afectaría también
-   a la sesión transferida.
-
-La atribución y revocación independientes por host para sesiones transferidas no están disponibles en
-este flujo. Si la cuenta revoca la sesión o el refresco deja de funcionar, repite el procedimiento. El
-iPhone solo consume la sesión ya instalada en la VPS; no recibe tokens OAuth.
-
-El arranque de producción elimina automáticamente locks OAuth huérfanos antes de abrir el único proceso
-web. Si una ejecución local se interrumpe de forma abrupta y después informa de que el almacén está
-ocupado, detén por completo Alfred y elimina únicamente `data/auth/chatgpt.lock` y
-`data/auth/chatgpt.lock.recovery`; no borres `data/auth/chatgpt.json`.
-
-Documentación oficial vigente:
-
-- [Inicio de sesión para apps open-source](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
-- [Modelos e inferencia con Responses API](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
-- [VMs autohospedadas](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
+- [OAuth web de OpenAI](https://developers.openai.com/siwc/website)
+- [Uso del plan en aplicaciones abiertas](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+- [Modelos e inferencia](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
 
 ## Límites del contenedor
 

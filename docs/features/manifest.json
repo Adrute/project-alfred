@@ -69,7 +69,7 @@
       "title": "ChatGPT, privacidad y logs",
       "doc": "docs/features/cloud-ai-privacy-logs.md",
       "keywords": ["chatgpt", "openai", "privacidad", "seudónimo", "log", "modelo"],
-      "entryPoints": ["src/ai/providers/openai-responses-provider.ts", "src/services/chatgpt-auth-service.ts", "src/app/auth/callback/route.ts", "scripts/manage-chatgpt-credentials.ts", "src/services/student-pseudonymization-service.ts", "src/services/cloud-ai-log-service.ts"]
+      "entryPoints": ["src/ai/providers/openai-responses-provider.ts", "src/services/chatgpt-auth-service.ts", "src/app/auth/callback/route.ts", "src/config/env.ts", "src/services/student-pseudonymization-service.ts", "src/services/cloud-ai-log-service.ts"]
     },
     {
       "id": "database-administration",

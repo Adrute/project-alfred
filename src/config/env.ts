@@ -21,6 +21,7 @@ const environmentSchema = z.object({
   OLLAMA_CONTEXT_LENGTH: z.coerce.number().int().min(4_096).max(32_768).default(8_192),
   OLLAMA_DEMO_MODE: booleanFromString,
   CHATGPT_MODEL: z.string().trim().min(1).default("gpt-6.1-sol"),
+  CHATGPT_OAUTH_CLIENT_ID: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().min(1).optional()),
   DATABASE_URL: z.string().startsWith("file:").default("file:./data/alfred.db"),
   DATA_DIRECTORY: z.string().trim().min(1).default("./data"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
