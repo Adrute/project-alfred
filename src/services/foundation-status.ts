@@ -5,7 +5,7 @@ import { getChatGptStatus } from "./chatgpt-auth-service";
 
 export interface FoundationStatus {
   database: { available: boolean; classrooms: number; students: number; detail: string };
-  ai: { connected: boolean; planEnabled: boolean; detail: string; model: string | null };
+  ai: { cloudEnabled: boolean; canSignInHere: boolean; connected: boolean; planEnabled: boolean; detail: string; model: string | null };
   agents: { count: number; names: string[] };
   privacy: { host: string; outboundPolicy: string };
 }
@@ -33,7 +33,7 @@ export async function getFoundationStatus(): Promise<FoundationStatus> {
 
   return {
     database: databaseStatus,
-    ai: { connected: ai.connected, planEnabled: ai.planEnabled, detail: ai.detail, model: ai.model },
+    ai: { cloudEnabled: ai.cloudEnabled, canSignInHere: ai.canSignInHere, connected: ai.connected, planEnabled: ai.planEnabled, detail: ai.detail, model: ai.model },
     agents: {
       count: registry.list().length,
       names: registry.list().map((agent) => agent.name),

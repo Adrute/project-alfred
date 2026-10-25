@@ -7,6 +7,7 @@ describe("runtime configuration", () => {
     expect(config.HOST).toBe("127.0.0.1");
     expect(config.OLLAMA_BASE_URL).toBe("http://127.0.0.1:11434");
     expect(config.CHATGPT_MODEL).toBe("gpt-6.1-sol");
+    expect(config.CLOUD_AI_ENABLED).toBe(true);
     expect(config.DATABASE_URL).toMatch(/^file:/);
   });
 
@@ -19,7 +20,8 @@ describe("runtime configuration", () => {
     expect(() => loadConfig({ NODE_ENV: "production" })).toThrow(/APP_ORIGIN/);
     expect(() => loadConfig({ APP_ORIGIN: "http://example.com" })).toThrow();
     expect(() => loadConfig({ APP_ORIGIN: "https://example.com/path" })).toThrow();
-    expect(loadConfig({ NODE_ENV: "production", APP_ORIGIN: "https://example.ts.net" }).CLOUD_AI_ENABLED).toBe(false);
+    expect(loadConfig({ NODE_ENV: "production", APP_ORIGIN: "https://example.ts.net" }).CLOUD_AI_ENABLED).toBe(true);
+    expect(loadConfig({ CLOUD_AI_ENABLED: "false" }).CLOUD_AI_ENABLED).toBe(false);
   });
 
   it("rejects remote AI providers", () => {

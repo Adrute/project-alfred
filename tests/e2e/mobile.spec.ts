@@ -12,6 +12,11 @@ test("private mobile workspace, roles, PWA metadata and logout", async ({ page }
   await expect(page.getByRole("button", { name: "Continuar con ChatGPT" })).toHaveCount(0);
   expect((await page.request.get("/api/admin/agents")).status()).toBe(403);
   await expect(page.locator('meta[name="apple-mobile-web-app-capable"]')).toHaveAttribute("content", "yes");
+  const appleIconUrl = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href");
+  expect(appleIconUrl).toMatch(/^\/apple-icon/);
+  const appleIcon = await page.request.get(appleIconUrl!);
+  expect(appleIcon.status()).toBe(200);
+  expect(appleIcon.headers()["content-type"]).toContain("image/png");
   const manifest = await (await page.request.get("/manifest.webmanifest")).json();
   expect(manifest).toMatchObject({ display: "standalone", start_url: "/" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

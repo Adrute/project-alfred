@@ -1,5 +1,5 @@
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,10 +11,12 @@ afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 async function configure(origin: string, clientId?: string) {
   vi.stubEnv("CLOUD_AI_ENABLED", "true");
-  vi.stubEnv("DATA_DIRECTORY", await mkdtemp(path.join(os.tmpdir(), "alfred-oauth-test-")));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "alfred-oauth-test-"));
+  vi.stubEnv("DATA_DIRECTORY", directory);
   vi.stubEnv("APP_ORIGIN", origin);
   vi.stubEnv("PORT", origin.endsWith(":3456") ? "3456" : "3000");
   if (clientId) vi.stubEnv("CHATGPT_OAUTH_CLIENT_ID", clientId);
+  return directory;
 }
 
 describe("ChatGPT OAuth sign-in", () => {
@@ -23,6 +25,55 @@ describe("ChatGPT OAuth sign-in", () => {
     const authorization = new URL(await beginChatGptSignIn(adminSession));
     expect(authorization.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3456/auth/callback");
     expect(authorization.searchParams.get("client_id")).toBe("dynamic_agent_client");
+  });
+
+  it.each([
+    [undefined, "/auth/callback"],
+    ["/auth/callback", "/auth/callback"],
+    ["/api/auth/chatgpt/callback", "/api/auth/chatgpt/callback"],
+  ])("preserves the callback for a saved local client (%s)", async (callbackPath, expectedPath) => {
+    const directory = await configure("http://127.0.0.1:3456");
+    const authDirectory = path.join(directory, "auth");
+    await mkdir(authDirectory);
+    await writeFile(path.join(authDirectory, "chatgpt.json"), JSON.stringify({
+      version: 1,
+      hostId: "urn:uuid:11111111-1111-4111-8111-111111111111",
+      aliasSecret: "fictional-alias-secret-with-at-least-32-characters",
+      registration: { subject: "fictional-user", clientId: "oaiapp_old", email: "fictional@example.test", scopes: [], callbackPath },
+      pending: null,
+    }));
+
+    const authorization = new URL(await beginChatGptSignIn(adminSession));
+    expect(authorization.searchParams.get("client_id")).toBe("oaiapp_old");
+    expect(authorization.searchParams.get("redirect_uri")).toBe(`http://127.0.0.1:3456${expectedPath}`);
+    expect(authorization.searchParams.has("agent_name_hint")).toBe(false);
+    expect(authorization.searchParams.get("ext_agent_host_id")).toBe("urn:uuid:11111111-1111-4111-8111-111111111111");
+    expect(authorization.searchParams.get("login_hint")).toBe("fictional@example.test");
+  });
+
+  it("allows an explicit local callback path for a legacy client", async () => {
+    const directory = await configure("http://127.0.0.1:3456");
+    const authDirectory = path.join(directory, "auth");
+    await mkdir(authDirectory);
+    await writeFile(path.join(authDirectory, "chatgpt.json"), JSON.stringify({
+      version: 1,
+      hostId: "urn:uuid:11111111-1111-4111-8111-111111111111",
+      aliasSecret: "fictional-alias-secret-with-at-least-32-characters",
+      registration: { subject: "fictional-user", clientId: "oaiapp_old", scopes: [] },
+      pending: null,
+    }));
+    vi.stubEnv("CHATGPT_LOCAL_CALLBACK_PATH", "/api/auth/chatgpt/callback");
+    const authorization = new URL(await beginChatGptSignIn(adminSession));
+    expect(authorization.searchParams.get("client_id")).toBe("oaiapp_old");
+    expect(authorization.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3456/api/auth/chatgpt/callback");
+  });
+
+  it("uses the current callback for a new registration even with a legacy override", async () => {
+    await configure("http://127.0.0.1:3456");
+    vi.stubEnv("CHATGPT_LOCAL_CALLBACK_PATH", "/api/auth/chatgpt/callback");
+    const authorization = new URL(await beginChatGptSignIn(adminSession));
+    expect(authorization.searchParams.get("client_id")).toBe("dynamic_agent_client");
+    expect(authorization.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3456/auth/callback");
   });
 
   it("uses a registered web client and the exact HTTPS callback on a remote instance", async () => {

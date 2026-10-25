@@ -39,6 +39,7 @@ const registrationSchema = z.object({
   earliestRefreshAt: z.string().datetime().optional(),
   scopes: z.array(z.string()).default([]),
   selectedModel: z.string().min(1).optional(),
+  callbackPath: z.enum(["/auth/callback", "/api/auth/chatgpt/callback"]).optional(),
 });
 
 const authStoreSchema = z.object({
@@ -208,9 +209,14 @@ function randomUrlSafe(bytes = 32) {
   return randomBytes(bytes).toString("base64url");
 }
 
-function callbackUri() {
+function callbackUri(store: AuthStore) {
   const config = loadConfig();
-  return `${config.APP_ORIGIN}/auth/callback`;
+  const callbackPath = config.CHATGPT_OAUTH_CLIENT_ID
+    ? "/auth/callback"
+    : store.registration
+      ? config.CHATGPT_LOCAL_CALLBACK_PATH ?? store.registration.callbackPath ?? "/auth/callback"
+      : "/auth/callback";
+  return `${config.APP_ORIGIN}${callbackPath}`;
 }
 
 function canAuthorizeOnThisHost() {
@@ -228,7 +234,7 @@ export async function beginChatGptSignIn(sessionToken: string) {
     const state = randomUrlSafe();
     const nonce = randomUrlSafe();
     const verifier = randomUrlSafe(48);
-    const redirectUri = callbackUri();
+    const redirectUri = callbackUri(store);
     const requestedClientId = loadConfig().CHATGPT_OAUTH_CLIENT_ID ?? store.registration?.clientId ?? "dynamic_agent_client";
     store.pending = pendingSchema.parse({
       state,
@@ -394,6 +400,7 @@ export async function completeChatGptSignIn(parameters: URLSearchParams, session
     earliestRefreshAt: parseEarliestRefresh(tokens.earliest_refresh_at),
     scopes,
     selectedModel,
+    callbackPath: new URL(pending.redirectUri).pathname,
   });
   await withAuthStoreLock(async () => {
     const store = await readStore();
@@ -487,7 +494,7 @@ export async function getChatGptStatus(): Promise<ChatGptConnectionStatus> {
         ? "La cuenta está conectada, pero no autorizó el uso del plan de ChatGPT."
         : canSignInHere
           ? "Conecta ChatGPT para activar el razonamiento con lenguaje natural."
-          : "Configura un cliente OAuth web de OpenAI para habilitar el inicio de sesión.",
+          : "Esta VPS necesita un cliente OAuth web aprobado por OpenAI para usar el plan de ChatGPT.",
   };
 }
 
@@ -536,6 +543,7 @@ export async function disconnectChatGpt() {
       name: registration.name,
       picture: registration.picture,
       selectedModel: registration.selectedModel,
+      callbackPath: registration.callbackPath,
       scopes: [],
     });
   }

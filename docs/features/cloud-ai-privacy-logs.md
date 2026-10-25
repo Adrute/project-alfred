@@ -30,8 +30,15 @@ antes de enviar el texto y la respuesta se revierte localmente antes de guardar 
   en la respuesta de administración; los cuerpos históricos no se exponen desde ese panel/API.
 - Una instancia HTTPS exige `CHATGPT_OAUTH_CLIENT_ID` de un cliente web público registrado para el
   callback exacto. No usa el cliente dinámico open-source con un callback remoto.
+- ChatGPT está habilitado por defecto también en local; `CLOUD_AI_ENABLED=false` corta expresamente
+  las conexiones cloud y oculta el botón de acceso. La cabecera usa el estado del servidor desde el
+  primer render y no presenta una desactivación transitoria mientras carga el detalle de la cuenta.
 - La autorización se vincula a la sesión admin iniciadora; `state` se consume una vez, y la inferencia
   requiere que el token conceda `chatgpt.tokens.use.direct`.
+- Las autorizaciones nuevas guardan la ruta de callback para reusarla. Un registro local anterior sin
+  metadatos puede requerir `CHATGPT_LOCAL_CALLBACK_PATH=/api/auth/chatgpt/callback` si se creó con la
+  ruta histórica; el valor solo se aplica a ese registro existente. Los registros nuevos usan
+  `/auth/callback`.
 - Solo se aceptan endpoints oficiales fijados en código; el resto de URLs de IA debe ser loopback.
 - Ningún modelo ejecuta SQL, comandos, rutas ni escrituras directas.
 

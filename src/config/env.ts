@@ -10,7 +10,7 @@ const environmentSchema = z.object({
   NEXT_TELEMETRY_DISABLED: z.literal("1").default("1"),
   HOST: z.enum(["127.0.0.1", "0.0.0.0"]).default("127.0.0.1"),
   APP_ORIGIN: z.string().optional(),
-  CLOUD_AI_ENABLED: booleanFromString,
+  CLOUD_AI_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   PORT: z.coerce.number().int().min(1024).max(65535).default(3000),
   OLLAMA_BASE_URL: z
     .string()
@@ -22,6 +22,7 @@ const environmentSchema = z.object({
   OLLAMA_DEMO_MODE: booleanFromString,
   CHATGPT_MODEL: z.string().trim().min(1).default("gpt-6.1-sol"),
   CHATGPT_OAUTH_CLIENT_ID: z.preprocess((value) => value === "" ? undefined : value, z.string().trim().min(1).optional()),
+  CHATGPT_LOCAL_CALLBACK_PATH: z.preprocess((value) => value === "" ? undefined : value, z.enum(["/auth/callback", "/api/auth/chatgpt/callback"]).optional()),
   DATABASE_URL: z.string().startsWith("file:").default("file:./data/alfred.db"),
   DATA_DIRECTORY: z.string().trim().min(1).default("./data"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

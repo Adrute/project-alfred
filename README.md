@@ -133,6 +133,7 @@ Copiar `.env.example` a `.env`. Las variables se validan al iniciar:
 | `CLOUD_AI_ENABLED` | `true` | Activa ChatGPT; ponerlo a `false` corta toda comunicación cloud |
 | `CHATGPT_MODEL` | `gpt-6.1-sol` | Modelo preferido, sujeto al catálogo disponible para la cuenta conectada |
 | `CHATGPT_OAUTH_CLIENT_ID` | vacío | ID de cliente OAuth público registrado para el callback HTTPS de producción |
+| `CHATGPT_LOCAL_CALLBACK_PATH` | vacío | Solo para recuperar un cliente local registrado con `/api/auth/chatgpt/callback` |
 | `DATABASE_URL` | `file:./data/alfred.db` | Archivo SQLite configurable |
 | `DATA_DIRECTORY` | `./data` | Directorio local de datos |
 | `LOG_LEVEL` | `info` | Nivel de registro |

@@ -20,7 +20,8 @@ cuenta.
 Compose empaqueta un proceso web, habilita ChatGPT por defecto y monta el directorio completo en `/app/data`.
 El arranque aplica migraciones Prisma pendientes antes de abrir Next.js y no ejecuta seed. El puerto
 publicado del host se limita a loopback, pensado para Tailscale Serve. La aplicación expone manifiesto
-standalone e iconos iOS y no añade service worker ni caché offline de datos sensibles.
+standalone y genera el icono de inicio de iPhone con el logo de Alfred sobre fondo opaco. No añade
+service worker ni caché offline de datos sensibles.
 
 ## Fuente de verdad e invariantes
 
@@ -42,7 +43,7 @@ standalone e iconos iOS y no añade service worker ni caché offline de datos se
 - Dominio y persistencia: `src/domain/auth.ts`, `src/services/auth-service.ts`,
   `src/repositories/auth-repository.ts`, `prisma/schema.prisma`, `prisma/migrations/20261024120000_app_auth/`
 - Frontera HTTP y UI: `src/lib/api-security.ts`, `src/lib/client-api.ts`,
-  `src/app/api/auth/session/route.ts`, `src/app/login/`, `src/app/manifest.ts`, `src/app/layout.tsx`
+  `src/app/api/auth/session/route.ts`, `src/app/login/`, `src/app/manifest.ts`, `src/app/apple-icon.tsx`, `src/app/layout.tsx`
 - Administración de cuentas: `scripts/manage-users.ts`, comando `npm run auth:user`
 - Contenedor: `Dockerfile`, `.dockerignore`, `compose.yaml`, `scripts/start-production.ts`
 - Guía operativa: `DEPLOYMENT.md`

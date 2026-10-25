@@ -34,6 +34,12 @@ preparar una entrega.
 
 ### Fixed
 
+- El icono de Alfred en la pantalla de inicio de iPhone usa el logo sobre un fondo opaco.
+- La ruta OAuth local puede fijarse para recuperar clientes registrados con el callback histórico;
+  las conexiones nuevas guardan la ruta para reautorizaciones posteriores.
+- La cabecera explica cuando la VPS necesita un cliente OAuth web aprobado por OpenAI.
+- ChatGPT aparece disponible para conectar en instalaciones locales sin `CLOUD_AI_ENABLED` explícito;
+  `false` conserva el corte de emergencia y la cabecera ya no muestra una desactivación transitoria.
 - El seed reutiliza franjas horarias por su clave de calendario y puede repetirse sobre una base existente.
 - Las continuaciones conversacionales reutilizan filtros, alumnado y tema previos en vez de perder el foco.
 - Las consultas alimentarias se enrutan a la memoria del alumnado y no a la organización de asientos.
