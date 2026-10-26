@@ -8,9 +8,10 @@ salida estructurada y panel de auditoría de peticiones cloud.
 ## Flujo actual
 
 ChatGPT es el único proveedor seleccionado por la factoría para razonamiento generativo. En local usa
-`http://127.0.0.1:<PORT>/auth/callback`; en una instancia HTTPS usa `<APP_ORIGIN>/auth/callback` con un
-cliente OAuth público registrado por OpenAI. El administrador pulsa **Continuar con ChatGPT**, autoriza
-en OpenAI y regresa a Alfred. El proveedor recibe contenido seudonimizado y
+`http://127.0.0.1:<PORT>/auth/callback` con registro dinámico. El administrador pulsa
+**Continuar con ChatGPT**, autoriza en OpenAI y regresa a Alfred. Una VPS autohospedada importa esa
+credencial protegida con `npm run ai:import-chatgpt`, conservando su propio host ID y secreto de alias.
+El OAuth web HTTPS directo solo se ofrece con un cliente autorizado por OpenAI. El proveedor recibe contenido seudonimizado y
 herramientas tipadas con `store: false` y streaming. La traza conserva metadatos
 de operación, modelo, uso, duración y error, sin cuerpos de request/response. Los alias se revierten localmente al mostrar
 la respuesta. El modelo efectivo puede configurarse por agente generativo y Administración agrega los
@@ -28,14 +29,20 @@ antes de enviar el texto y la respuesta se revierte localmente antes de guardar 
 - No se registran tokens OAuth, cabeceras, prompts de sistema ni razonamiento interno.
 - Las trazas nuevas no persisten cuerpos de petición ni respuesta. Las trazas históricas se redactan
   en la respuesta de administración; los cuerpos históricos no se exponen desde ese panel/API.
-- Una instancia HTTPS exige `CHATGPT_OAUTH_CLIENT_ID` de un cliente web público registrado para el
-  callback exacto. No usa el cliente dinámico open-source con un callback remoto.
+- Una instancia HTTPS usa la credencial importada del Mac para el mismo cliente, cuenta y workspace, o
+  `CHATGPT_OAUTH_CLIENT_ID` de un cliente web autorizado para su callback exacto. El registro dinámico
+  nunca se inicia con callback remoto.
+- La importación acepta un archivo regular privado con cliente emitido, access/refresh tokens y permiso
+  de uso del plan; conserva `hostId` y `aliasSecret` de la VPS y no sobrescribe una conexión activa.
+- Durante la transferencia se detiene el Mac; tras verificar la VPS se retiran sus tokens locales sin
+  revocar el refresh token compartido. La VPS queda como propietaria de las renovaciones.
 - ChatGPT está habilitado por defecto también en local; `CLOUD_AI_ENABLED=false` corta expresamente
   las conexiones cloud y oculta el botón de acceso. La cabecera usa el estado del servidor desde el
   primer render y no presenta una desactivación transitoria mientras carga el detalle de la cuenta.
 - La autorización se vincula a la sesión admin iniciadora; `state` se consume una vez, y la inferencia
   requiere que el token conceda `chatgpt.tokens.use.direct`.
-- Las autorizaciones nuevas guardan la ruta de callback para reusarla. Un registro local anterior sin
+- Las autorizaciones nuevas guardan la ruta de callback para reusarla. **Registrar de nuevo** inicia
+  `dynamic_agent_client` con `/auth/callback` y conserva la sesión anterior hasta validar la nueva. Un registro local anterior sin
   metadatos puede requerir `CHATGPT_LOCAL_CALLBACK_PATH=/api/auth/chatgpt/callback` si se creó con la
   ruta histórica; el valor solo se aplica a ese registro existente. Los registros nuevos usan
   `/auth/callback`.
@@ -48,7 +55,7 @@ antes de enviar el texto y la respuesta se revierte localmente antes de guardar 
   `src/ai/providers/provider-factory.ts`, `src/ai/providers/llm-provider.ts`
 - Autenticación: `src/services/chatgpt-auth-service.ts`, `src/app/api/auth/chatgpt/route.ts`,
   `src/app/api/auth/chatgpt/start/route.ts`, `src/app/auth/callback/route.ts`,
-  `src/config/env.ts`
+  `src/config/env.ts`, `scripts/import-chatgpt.ts`, `scripts/retire-chatgpt.ts`
 - Privacidad: `src/services/student-pseudonymization-service.ts`
 - Logs: `src/services/cloud-ai-log-service.ts`, `src/repositories/cloud-ai-log-repository.ts`,
   `src/app/api/admin/logs/route.ts`

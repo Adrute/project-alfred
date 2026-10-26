@@ -23,6 +23,8 @@
     "agents:validate": "node --import tsx scripts/validate-development-agents.ts",
     "branch:check": "node --import tsx scripts/check-development-branch.ts",
     "ai:check": "node --import tsx scripts/check-chatgpt.ts",
+    "ai:import-chatgpt": "node --import tsx scripts/import-chatgpt.ts",
+    "ai:retire-chatgpt": "node --import tsx scripts/retire-chatgpt.ts",
     "ai:eval": "node --import tsx scripts/evaluate-assistant-model.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

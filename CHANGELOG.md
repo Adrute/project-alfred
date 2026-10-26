@@ -8,6 +8,7 @@ preparar una entrega.
 
 ### Added
 
+- Importación protegida de la autorización ChatGPT del Mac a una VPS autohospedada, conservando el identificador de host y los alias de la VPS, y retirada local sin revocación tras la transferencia.
 - Acceso local con cuentas y roles, sesiones protegidas, aplicación instalable y archivos de despliegue Docker/Coolify con SQLite persistente.
 - Activación local de ChatGPT mediante callback loopback y acceso OAuth web desde el botón en instancias HTTPS con cliente registrado.
 - Flujo de comentarios del profesorado por alumno: conserva el original, propone una redacción respetuosa
@@ -34,6 +35,7 @@ preparar una entrega.
 
 ### Fixed
 
+- El registro nuevo de ChatGPT en local usa el cliente dinámico y `/auth/callback`, incluso con una configuración web o una ruta heredada; el estado distingue una sesión caducada de una activa.
 - El icono de Alfred en la pantalla de inicio de iPhone usa el logo sobre un fondo opaco.
 - La ruta OAuth local puede fijarse para recuperar clientes registrados con el callback histórico;
   las conexiones nuevas guardan la ruta para reautorizaciones posteriores.

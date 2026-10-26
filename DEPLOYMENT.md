@@ -194,28 +194,51 @@ Chromium; Safari/iPhone real queda pendiente de una validación manual en ese di
 
 ## Integración ChatGPT
 
-Para conectar ChatGPT desde la instancia HTTPS, registra con OpenAI un cliente OAuth **público** cuya
-URL de retorno exacta sea `<APP_ORIGIN>/auth/callback`. Configura el ID recibido en
-`CHATGPT_OAUTH_CLIENT_ID` y despliega la aplicación. No se copia ninguna sesión desde un equipo local.
+La vía documentada para una herramienta abierta en una VM autohospedada es autorizar **la misma
+instalación de Alfred en el Mac** y transferir después su archivo de credenciales protegido. No requiere
+clave de OpenAI API ni facturación separada por tokens. El uso del plan está sujeto al permiso
+`chatgpt.tokens.use.direct` y a los límites de ChatGPT Plus.
 
-Entra en Alfred como administrador y pulsa **Continuar con ChatGPT**. El navegador va a OpenAI, vuelve
-al callback HTTPS de Alfred y la conexión queda guardada en el servidor. La sesión de Alfred que inicia
-el proceso debe seguir activa; `state`, PKCE, nonce e identidad se comprueban antes de aceptar tokens.
+1. En el Mac, usa `APP_ORIGIN=http://127.0.0.1:<PORT>` con el mismo `PORT` al que accedes. Inicia Alfred,
+   entra como administrador y pulsa **Continuar con ChatGPT**. Si aparece
+   `invalid_authorize_request` con una inscripción anterior, pulsa **Registrar de nuevo**: solicita
+   `client_id=dynamic_agent_client` y el callback fijo `/auth/callback`, aunque exista
+   `CHATGPT_LOCAL_CALLBACK_PATH` para el registro antiguo. No copies la sesión de Safari ni de Codex.
+2. Termina la autorización en OpenAI y comprueba que Alfred muestre **ChatGPT activo**. Ejecuta
+   `npm run ai:check` en el Mac para verificar una inferencia real sin datos docentes. Si no se concede
+   el permiso de uso del plan, Alfred seguirá en modo manual y no hay credencial apta para transferir.
+3. Detén Alfred en el Mac después de `ai:check` para que no renueve tokens mientras transfieres la
+   credencial. En la VPS, detén Alfred para hacer el backup del volumen y arráncalo de nuevo. Deja que haya creado su
+   propio `hostId` en `/app/data/auth/chatgpt.json` (basta una lectura de estado). Conserva
+   ese archivo y su `aliasSecret`. Transfiere **el archivo completo** `data/auth/chatgpt.json` del Mac
+   mediante SSH/SCP a una ruta temporal privada de la VPS, accesible para el usuario del contenedor.
+   No lo adjuntes a tickets, no lo imprimas ni lo subas a Git. Fija permisos `600` antes de importarlo.
+4. En la terminal del contenedor ejecuta `npm run ai:import-chatgpt -- <ruta-temporal-privada>`.
+   El comando importa solo la inscripción y los tokens; conserva `hostId` y `aliasSecret` propios de la
+   VPS y rechaza reemplazar una conexión activa. Elimina el archivo temporal después de importarlo.
+   Reinicia Alfred y verifica **ChatGPT activo** y `npm run ai:check` desde la VPS. Desde entonces, la
+   VPS renueva sus tokens. Antes de volver a abrir Alfred en el Mac, ejecuta allí
+   `npm run ai:retire-chatgpt`: elimina **solo la copia local de los tokens**, sin revocar en OpenAI la
+   sesión que ahora usa la VPS. El Mac podrá autorizarse de nuevo más adelante con su propio host ID.
+   Protege también las copias del volumen, que contienen la credencial.
 
-El cliente OAuth debe poder solicitar `offline_access`, `resource.invoke` y
-`chatgpt.tokens.use.direct`. El registro OAuth web para identidad y el permiso de uso del plan son
-capacidades distintas: si OpenAI no autoriza este último, Alfred mostrará la cuenta conectada, pero no
-usará ChatGPT para inferencia. Este acceso requiere la autorización y el cliente apropiados de OpenAI;
-configurar un ID cualquiera no los concede. No se ha validado aún con un cliente real.
+La autorización OAuth directa desde el navegador de Alfred en HTTPS usa otro programa de OpenAI para
+clientes web, actualmente limitado a socios seleccionados. Solo si OpenAI registra y autoriza un cliente
+público para el callback exacto `<APP_ORIGIN>/auth/callback` configura `CHATGPT_OAUTH_CLIENT_ID`. Un ID
+arbitrario o un cliente creado para loopback puede producir `invalid_authorize_request`. Sin ese permiso,
+deja la variable vacía y utiliza la transferencia oficial anterior. El botón web no se muestra en la
+VPS sin cliente configurado, pero una credencial importada sí habilita la IA. Alfred funciona en modo
+manual si no hay conexión válida.
 
-En una instalación local abierta en `http://127.0.0.1:<PORT>`, sigue disponible el callback loopback del
-flujo open-source. El arranque de producción elimina locks OAuth huérfanos antes de abrir el proceso web.
-No borres `data/auth/chatgpt.json`: contiene el registro OAuth activo y el secreto local de alias.
+La sesión de Alfred que inicia OAuth debe seguir activa; `state`, PKCE, nonce e identidad se validan
+antes de aceptar tokens. El arranque de producción elimina locks OAuth huérfanos. No borres el archivo
+`chatgpt.json` de producción: contiene el identificador de host y el secreto local de alias.
 
 Documentación oficial:
 
 - [OAuth web de OpenAI](https://developers.openai.com/siwc/website)
 - [Uso del plan en aplicaciones abiertas](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+- [Transferencia a VMs autohospedadas](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
 - [Modelos e inferencia](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
 
 ## Límites del contenedor

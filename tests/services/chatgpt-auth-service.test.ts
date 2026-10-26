@@ -1,9 +1,9 @@
 import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { beginChatGptSignIn, completeChatGptSignIn, getChatGptSession, getChatGptStatus } from "@/services/chatgpt-auth-service";
+import { beginChatGptSignIn, completeChatGptSignIn, getAliasSecret, getChatGptSession, getChatGptStatus, importChatGptCredentials, retireLocalChatGptCredentials } from "@/services/chatgpt-auth-service";
 
 const adminSession = "a".repeat(43);
 
@@ -20,8 +20,16 @@ async function configure(origin: string, clientId?: string) {
 }
 
 describe("ChatGPT OAuth sign-in", () => {
+  it("creates one stable host and alias secret under concurrent first reads", async () => {
+    const directory = await configure("http://127.0.0.1:3456");
+    const secrets = await Promise.all(Array.from({ length: 12 }, () => getAliasSecret()));
+    const persisted = JSON.parse(await readFile(path.join(directory, "auth", "chatgpt.json"), "utf8"));
+    expect(new Set(secrets).size).toBe(1);
+    expect(secrets[0]).toBe(persisted.aliasSecret);
+  });
+
   it("uses the loopback callback for local open-source sign-in", async () => {
-    await configure("http://127.0.0.1:3456");
+    await configure("http://127.0.0.1:3456", "oaiapp_web_not_registered_for_loopback");
     const authorization = new URL(await beginChatGptSignIn(adminSession));
     expect(authorization.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3456/auth/callback");
     expect(authorization.searchParams.get("client_id")).toBe("dynamic_agent_client");
@@ -74,6 +82,74 @@ describe("ChatGPT OAuth sign-in", () => {
     const authorization = new URL(await beginChatGptSignIn(adminSession));
     expect(authorization.searchParams.get("client_id")).toBe("dynamic_agent_client");
     expect(authorization.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3456/auth/callback");
+  });
+
+  it("starts a fresh local registration with the official callback without replacing the saved session", async () => {
+    const directory = await configure("http://127.0.0.1:3456");
+    const authDirectory = path.join(directory, "auth");
+    await mkdir(authDirectory);
+    const file = path.join(authDirectory, "chatgpt.json");
+    await writeFile(file, JSON.stringify({
+      version: 1, hostId: "urn:uuid:11111111-1111-4111-8111-111111111111",
+      aliasSecret: "fictional-alias-secret-with-at-least-32-characters",
+      registration: { subject: "fictional-user", clientId: "oaiapp_old", callbackPath: "/api/auth/chatgpt/callback", scopes: [] },
+      pending: null,
+    }));
+    vi.stubEnv("CHATGPT_LOCAL_CALLBACK_PATH", "/api/auth/chatgpt/callback");
+    const authorization = new URL(await beginChatGptSignIn(adminSession, true));
+    expect(authorization.searchParams.get("client_id")).toBe("dynamic_agent_client");
+    expect(authorization.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3456/auth/callback");
+    expect(authorization.searchParams.get("agent_name_hint")).toBe("Alfred");
+    expect(JSON.parse(await readFile(file, "utf8")).registration.clientId).toBe("oaiapp_old");
+  });
+
+  it("imports a protected local registration while preserving the VM host and alias secret", async () => {
+    const directory = await configure("https://alfred.example.ts.net");
+    const source = path.join(directory, "mac-chatgpt.json");
+    await writeFile(source, JSON.stringify({
+      version: 1, hostId: "urn:uuid:11111111-1111-4111-8111-111111111111",
+      aliasSecret: "fictional-mac-alias-secret-with-at-least-32-characters",
+      registration: {
+        subject: "fictional-user", clientId: "oaiapp_local", accessToken: "fictional-access",
+        refreshToken: "fictional-refresh", expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        scopes: ["chatgpt.tokens.use.direct"], callbackPath: "/auth/callback",
+      }, pending: null,
+    }), { mode: 0o600 });
+    const before = await getChatGptStatus();
+    expect(before.planEnabled).toBe(false);
+    const destinationFile = path.join(directory, "auth", "chatgpt.json");
+    const destinationBefore = JSON.parse(await readFile(destinationFile, "utf8"));
+    await importChatGptCredentials(source);
+    const imported = JSON.parse(await readFile(destinationFile, "utf8"));
+    expect(imported.hostId).toBe(destinationBefore.hostId);
+    expect(imported.aliasSecret).toBe(destinationBefore.aliasSecret);
+    expect(imported.registration.clientId).toBe("oaiapp_local");
+    expect((await getChatGptStatus()).planEnabled).toBe(true);
+    await expect(importChatGptCredentials(source)).rejects.toThrow(/ya tiene una conexión/);
+    await retireLocalChatGptCredentials();
+    const retired = JSON.parse(await readFile(destinationFile, "utf8"));
+    expect(retired.hostId).toBe(destinationBefore.hostId);
+    expect(retired.registration.clientId).toBe("oaiapp_local");
+    expect(retired.registration.accessToken).toBeUndefined();
+    expect(retired.registration.refreshToken).toBeUndefined();
+    expect((await getChatGptStatus()).planEnabled).toBe(false);
+  });
+
+  it("reports an expired, unrenewable session as disconnected", async () => {
+    const directory = await configure("http://127.0.0.1:3456");
+    const authDirectory = path.join(directory, "auth");
+    await mkdir(authDirectory);
+    await writeFile(path.join(authDirectory, "chatgpt.json"), JSON.stringify({
+      version: 1, hostId: "urn:uuid:11111111-1111-4111-8111-111111111111",
+      aliasSecret: "fictional-alias-secret-with-at-least-32-characters",
+      registration: {
+        subject: "fictional-user", clientId: "oaiapp_old", accessToken: "expired-access",
+        refreshToken: "revoked-refresh", expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        scopes: ["chatgpt.tokens.use.direct"],
+      }, pending: null,
+    }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 401 })));
+    expect(await getChatGptStatus()).toMatchObject({ connected: false, planEnabled: false });
   });
 
   it("uses a registered web client and the exact HTTPS callback on a remote instance", async () => {

@@ -132,8 +132,8 @@ Copiar `.env.example` a `.env`. Las variables se validan al iniciar:
 | `APP_ORIGIN` | `http://127.0.0.1:3000` | Origen exacto; en producción debe ser HTTPS |
 | `CLOUD_AI_ENABLED` | `true` | Activa ChatGPT; ponerlo a `false` corta toda comunicación cloud |
 | `CHATGPT_MODEL` | `gpt-6.1-sol` | Modelo preferido, sujeto al catálogo disponible para la cuenta conectada |
-| `CHATGPT_OAUTH_CLIENT_ID` | vacío | ID de cliente OAuth público registrado para el callback HTTPS de producción |
-| `CHATGPT_LOCAL_CALLBACK_PATH` | vacío | Solo para recuperar un cliente local registrado con `/api/auth/chatgpt/callback` |
+| `CHATGPT_OAUTH_CLIENT_ID` | vacío | Solo para un cliente web autorizado por OpenAI; en VPS autohospedada se importa la credencial autorizada en el Mac |
+| `CHATGPT_LOCAL_CALLBACK_PATH` | vacío | Solo para un cliente local antiguo; **Registrar de nuevo** usa siempre `/auth/callback` |
 | `DATABASE_URL` | `file:./data/alfred.db` | Archivo SQLite configurable |
 | `DATA_DIRECTORY` | `./data` | Directorio local de datos |
 | `LOG_LEVEL` | `info` | Nivel de registro |
@@ -304,9 +304,9 @@ Safari e iPhone real siguen pendientes de validación.
 
 - La compatibilidad arquitectónica con Windows está implementada, pero todavía requiere una ejecución
   real en Windows 11 para considerarse validada.
-- En producción, el botón **Continuar con ChatGPT** necesita un cliente OAuth web público registrado
-  por OpenAI con la URL HTTPS exacta de retorno. El inicio de sesión no habilita inferencia si el cliente
-  no obtiene `chatgpt.tokens.use.direct`; consulta `DEPLOYMENT.md`.
+- El botón OAuth directo en HTTPS necesita un cliente web autorizado por OpenAI. En una VPS
+  autohospedada puede importarse la credencial protegida autorizada con Alfred en el Mac. Ninguna vía
+  habilita inferencia sin `chatgpt.tokens.use.direct`; consulta `DEPLOYMENT.md`.
 - El solver usa búsqueda heurística reproducible con 2.000 intentos; garantiza restricciones duras en
   el resultado, pero no demuestra óptimo global para aulas mayores o restricciones futuras.
 - La evaluación de intención debe pasar completa con el modelo configurado antes de una entrega.

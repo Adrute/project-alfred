@@ -54,7 +54,8 @@ service worker ni caché offline de datos sensibles.
 
 - `APP_ORIGIN`: origen exacto HTTPS de producción; local usa `http://127.0.0.1:<PORT>`.
 - `CLOUD_AI_ENABLED`: `true` en Compose; `false` es el corte de emergencia de toda comunicación cloud.
-- `CHATGPT_OAUTH_CLIENT_ID`: ID del cliente OAuth público registrado para el callback HTTPS.
+- `CHATGPT_OAUTH_CLIENT_ID`: solo si OpenAI autorizó un cliente OAuth web para el callback HTTPS.
+  La VPS autohospedada puede importar la credencial de la misma aplicación autorizada en el Mac.
 - `HOST`: loopback local; `0.0.0.0` solo dentro del contenedor.
 - `DATABASE_URL` y `DATA_DIRECTORY`: Compose los fija bajo `/app/data`.
 - `ALFRED_HOST_PORT`: puerto local opcional del host, por defecto `13000`.
@@ -65,8 +66,9 @@ service worker ni caché offline de datos sensibles.
 
 La prueba Playwright de interfaz móvil usa Chromium y datos ficticios. No certifica Safari ni una
 instalación real en iPhone. La prueba de migración debe preservar tablas existentes y no aplicar seeds.
-El flujo ChatGPT en HTTPS requiere un cliente OAuth público registrado por OpenAI para el callback
-exacto de la instancia. La sesión se autoriza desde el botón y vuelve a la misma instancia.
+El OAuth web directo en HTTPS requiere un cliente público autorizado por OpenAI para el callback
+exacto. Para una VM autohospedada, se autoriza la misma aplicación en el Mac con callback loopback y
+se importa el archivo protegido conservando el identificador de host de la VM.
 
 ## Checklist de cambio
 
