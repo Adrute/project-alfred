@@ -10,6 +10,7 @@ permissions:
 
 env:
   NEXT_TELEMETRY_DISABLED: 1
+  APP_ORIGIN: http://127.0.0.1:3000
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -37,6 +38,7 @@ jobs:
           ALFRED_BRANCH_NAME: ${{ github.head_ref }}
       - run: npm run agents:validate
       - run: npm run lint
+      - run: npx next typegen
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

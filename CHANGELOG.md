@@ -35,6 +35,7 @@ preparar una entrega.
 
 ### Fixed
 
+- CI genera los tipos de rutas de Next.js antes de ejecutar TypeScript y define un origen local para el build.
 - El registro nuevo de ChatGPT en local usa el cliente dinámico y `/auth/callback`, incluso con una configuración web o una ruta heredada; el estado distingue una sesión caducada de una activa.
 - El icono de Alfred en la pantalla de inicio de iPhone usa el logo sobre un fondo opaco.
 - La ruta OAuth local puede fijarse para recuperar clientes registrados con el callback histórico;
