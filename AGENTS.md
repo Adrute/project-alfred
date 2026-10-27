@@ -68,10 +68,14 @@ regenera el cliente. Añade claves foráneas, índices y restricciones. Nunca co
 
 ## Pruebas y definición de terminado
 
-Ejecuta antes de entregar: `npm run lint`, `npm run typecheck`, `npm test` y `npm run build`. Para
-cambios de persistencia ejecuta también las migraciones y el seed sobre una base de prueba. Toda regla
-determinista debe tener pruebas unitarias; los casos de uso, integración; los recorridos críticos,
-Playwright. Añade regresiones para cada fallo corregido.
+Ejecuta solo las comprobaciones que cubran los archivos y recorridos modificados: lint y typecheck
+focalizados cuando sea posible, pruebas unitarias o de integración relacionadas y Playwright solo si
+cambia un recorrido crítico de interfaz. Ejecuta `npm run lint`, `npm run typecheck`, `npm test` y
+`npm run build` completos cuando el cambio sea transversal, afecte a configuración o compilación global,
+o se solicite expresamente. Para cambios de persistencia ejecuta también las migraciones y el seed sobre
+una base de prueba. Toda regla determinista debe tener pruebas unitarias; los casos de uso, integración;
+los recorridos críticos, Playwright. Añade regresiones para cada fallo corregido. No repitas una batería
+que ya pasó si los cambios posteriores no afectan a su alcance.
 
 No marques una función como terminada si depende de IA generativa y no fue probada con el proveedor y
 modelo configurados.

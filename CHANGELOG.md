@@ -28,6 +28,8 @@ preparar una entrega.
 
 ### Changed
 
+- Las comprobaciones de desarrollo se limitan a las áreas modificadas y se amplían a la batería completa
+  cuando el alcance lo requiere.
 - ChatGPT pasa a ser el único proveedor generativo en producción; el interruptor cloud queda como corte de emergencia y las trazas nuevas guardan solo metadatos.
 - Alfred conserva el contexto de cada conversación, encadena herramientas tipadas y presenta respuestas
   con Markdown seguro bajo una única identidad visual.

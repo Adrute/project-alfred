@@ -85,7 +85,8 @@ Recomendación al orquestador:
 4. Reviewer examina el diff final en cambios transversales o de riesgo medio/alto.
 5. Documentation actualiza `CHANGELOG.md`, las fichas funcionales, configuración, arquitectura y uso.
 6. Reviewer comprueba que la rama no sea protegida y que documentación y pruebas correspondan al diff.
-7. El orquestador ejecuta la definición de terminado de `AGENTS.md` y entrega un único informe consolidado.
+7. El orquestador ejecuta las comprobaciones focalizadas de `AGENTS.md`, amplía el alcance solo cuando
+   el riesgo o el diff lo exigen y entrega un único informe consolidado.
 
 ## Integración
 

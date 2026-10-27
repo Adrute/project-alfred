@@ -13,6 +13,7 @@ out/
 data/*.db
 data/*.db-*
 data/auth/
+data/backups/
 data/e2e-runtime/
 prisma/*.db
 prisma/*.db-*
@@ -23,6 +24,7 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+.worktrees/
 
 # Editors and operating systems
 .DS_Store
